@@ -127,7 +127,7 @@ def saveObsToFile(atoms):
             experiments_observations[exp_num] = [atom]
         
         elif "observation" in atom:
-            terms = re.search('\((.*)\)', atom).group(1)
+            terms = re.search(r'\((.*)\)', atom).group(1)
             terms = terms.split(',')
             experiments_observations[terms[0]] += [atom]
 
