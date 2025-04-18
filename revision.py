@@ -178,7 +178,7 @@ def readModels():
   return output_model_list
 
 def getModelCompounds(model):
-  return re.findall('compound\((.+?)\).',model)
+  return re.findall(r'compound\((.+?)\).',model)
 
 def getCompoundRegulatorNumber(model, compound):
   return len(re.findall(fr'regulates\((.+?), ?{compound}, ?(0|1)\).',model))
