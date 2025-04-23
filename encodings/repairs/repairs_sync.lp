@@ -4,7 +4,7 @@
 %is able to replicate the observed state).
 
 #const compound = c.
-#const node_number = n.
+#const max_node_number = n.
 
 %*--Fixing regulators--*%
 %fixed/2 tells us that regulator C has to be one of the compound's regulators
@@ -35,7 +35,7 @@ available_node_ID(1..TERM_NO) :- function(compound, TERM_NO).
 
 %If we require more IDs than those that were originally available,
 %create them
-available_node_ID(TERM_NO + 1..node_number):- function(compound, TERM_NO), node_number > TERM_NO.
+available_node_ID(1..max_node_number):- function(compound, TERM_NO), max_node_number > TERM_NO.
 
 %Distribute compounds across available IDs
 {node_regulator(N,C) : compound(C)} :- available_node_ID(N).
@@ -86,6 +86,9 @@ missing_node_regulator(ID,R) :- term(compound, ID, R), node_ID(ID), not node_reg
 %extra regulator
 extra_node_regulator(ID,R) :- node_regulator(ID, R), term(compound, ID, _), not term(compound, ID, R).
 
+%Count extra or missing nodes to assess the difference in number of terms with the original function
+missing_full_node(N) :- available_node_ID(N), not node_ID(N), function(compound, TERM_NO), N < TERM_NO.
+extra_full_node(N) :- node_ID(N), function(compound, TERM_NO), N > TERM_NO.
 
 %Test
 %1-We're only interested in generating nodes that can be used to explain the observations,
@@ -106,8 +109,13 @@ extra_node_regulator(ID,R) :- node_regulator(ID, R), term(compound, ID, _), not 
 %5-Fixed regulators must be present in the final solution
 :- fixed_regulator(C), not node_regulator(_,C).
 
-%6-We must always have node_number nodes in our solution
-:- node_number != #count{N : node_regulator(N,R)}.
+% WIP - removing this restriction to phrase as optimization criteria
+%     %6-We must always have node_number nodes in our solution
+%     % :- node_number != #count{N : node_regulator(N,R)}. 
+
+%6-Used node IDs must be continuous
+% In other words, if an available id higher than another availabe id is used than the lower id must also be used
+:- available_node_ID(N1), available_node_ID(N2), N1 < N2, nodeID(N2), not node_ID(N1).
 
 
 %Display
@@ -124,16 +132,22 @@ regulator_inhibitor(C) :- node_regulator(N,C), inhibitor(C).
 #show sign_changed/1.
 #show missing_node_regulator/2.
 #show extra_node_regulator/2.
+#show missing_full_node/1.
+#show extra_full_node/1.
 
 
 %Optimize
-%1-Optimize for the minimum changes to regulators (highest priority)
+%1-Optimize for the minimum changes to number of terms (highest priority)
+#minimize{1@4,N : extra_full_node(N)}.
+#minimize{1@4,N : missing_full_node(N)}.
+
+%2-Optimize for the minimum changes to regulators
 #minimize{1@3,C : missing_regulator(C)}.
 #minimize{1@3,C : extra_regulator(C)}.
 
-%2-Optimize for the minimum changes to regulator signs 
+%3-Optimize for the minimum changes to regulator signs 
 #minimize{1@2,C : sign_changed(C)}.
 
-%3-Optimize for minimum changes to original node format
+%4-Optimize for minimum changes to original node format
 #minimize{1@1,N,C : missing_node_regulator(N,C)}.
 #minimize{1@1,N,C : extra_node_regulator(N,C)}.

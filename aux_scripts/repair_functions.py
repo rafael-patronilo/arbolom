@@ -136,49 +136,36 @@ def generateFunctions(func, model, incst, upo, toggle_stable_state, toggle_sync,
 def generateFunctions(func, model, incst, upo, toggle_stable_state, toggle_sync, toggle_async, path_mode = False, enable_prints=False):
   if enable_prints: print("Calculating repairs...")
 
-  current_variation = 0
-  final_variation = 0
+  #current_variation = 0
+  #final_variation = 0
   function = []
   upo_program = ""
   if upo : upo_program = upo[0]
-  starting_node_number, max_node_limit = determineStartNodesAndLimit(func,model,upo,path_mode)
+
+  def countNodeVariation(function):
+    variation = 0
+    for atom in function:
+      if 'extra_full_node' in atom:
+        variation += 1
+      elif 'missing_full_node' in atom:
+        variation -= 1
+    return variation
+
+  _, max_node_limit = determineStartNodesAndLimit(func,model,upo,path_mode)
 
   timeout_start = time.time()
-  while True:
-    if current_variation == 0:
-      if enable_prints: print(f"Trying to find a solution with the same ({starting_node_number}) number of nodes...")
-      node_number = starting_node_number
-      function = generateFunctionsClingo(node_number, timeout_start, func, model, incst, upo_program, toggle_stable_state, toggle_sync, toggle_async, path_mode, enable_prints)
-      if function == "timed_out": return function, 0
-          
-    else:
-      high_node_number = starting_node_number + current_variation
-      function_above = None
-      if high_node_number <= max_node_limit:
-        if enable_prints: print(f"Trying to find a solution with {starting_node_number + current_variation} nodes...(max is {max_node_limit})")
-        function_above = generateFunctionsClingo(high_node_number, timeout_start, func, model, incst, upo_program, toggle_stable_state, toggle_sync, toggle_async, path_mode, enable_prints)
-        if function_above == "timed_out": return function_above, 0
-      
-      low_node_number = starting_node_number - current_variation
-      function_below = None
-      if low_node_number > 0:
-        if enable_prints: print(f"Trying to find a solution with {starting_node_number - current_variation} nodes...(minimum is 1)")
-        function_below = generateFunctionsClingo(low_node_number, timeout_start, func, model, incst, upo_program, toggle_stable_state, toggle_sync, toggle_async, path_mode, enable_prints)
-        if function_below == "timed_out": return function_below, 0
-
-      function, final_variation = compareAndGetBestFunction(function_above, function_below, current_variation)
-
-    if function:
-      if enable_prints: print("... Done.")
-      return function, final_variation
-
-    else:
-      if enable_prints: print(f"No solutions with {starting_node_number + current_variation} nodes.")
-      current_variation += 1
-      if starting_node_number + current_variation > max_node_limit and \
-        starting_node_number - current_variation <= 0:
-        if enable_prints: print("... Done.")
-        return "no_solution", 0
+  if enable_prints: print(f"Trying to find a solution with at most ({max_node_limit}) nodes...")
+  function = generateFunctionsClingo(max_node_limit, timeout_start, func, model, incst, upo_program, 
+                                     toggle_stable_state, toggle_sync, toggle_async, path_mode, enable_prints)
+  if function == "timed_out": 
+    if enable_prints: print(f"No solutions.")
+    return function, 0
+  elif function:
+    if enable_prints: print("... Done.")
+    return function, countNodeVariation(function)
+  else:
+    if enable_prints: print(f"No solutions.")
+    return "no_solution", 0
 
 #Inputs:
 # function_above - the function with original number of nodes + variation
@@ -264,7 +251,7 @@ def getFuncStatMap(function):
 #Purpose: Calls clingo to solve the repair encoding
 def generateFunctionsClingo(node_number, timeout_start, func, model, incst, upo_program, toggle_stable_state, toggle_sync, toggle_async, path_mode = False, enable_prints=False):
   no_timeout = True
-  clingo_args = ["0", f"-c compound={func}", f"-c node_number={node_number}"]
+  clingo_args = ["0", f"-c compound={func}", f"-c max_node_number={node_number}"]
       
   ctl = clingo.Control(arguments=clingo_args, logger= lambda a,b: None)
 
