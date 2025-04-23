@@ -361,10 +361,10 @@ def repair(model, inconsistencies, revision_stats):
         toggle_sync, toggle_async)
       upo = processPreviousObservations(prev_obs)
       
-      compound_repair_start = time.time()
+      compound_repair_start = time.monotonic()
       functions, node_variation = generateFunctions(func, model, inconsistencies, upo,
         toggle_stable_state, toggle_sync, toggle_async)
-      compound_repair_end = time.time()
+      compound_repair_end = time.monotonic()
 
       if functions == "timed_out": 
         timed_out_functions.append(func)
@@ -416,14 +416,14 @@ for model in models:
   total_consistency_time = 0
   total_repair_time = 0
 
-  revision_start_time = time.time()
+  revision_start_time = time.monotonic()
   model_revision_stats = initRevisionStatsMap(model[0])
 
   if bulk_enabled and not benchmark_enabled: print("Currently revising model ", model[1])
 
-  consistency_start_time = time.time()
+  consistency_start_time = time.monotonic()
   inconsistencies = checkConsistency(model[0], obsv_path)
-  consistency_end_time = time.time()
+  consistency_end_time = time.monotonic()
 
   total_consistency_time = consistency_end_time - consistency_start_time
 
@@ -433,15 +433,15 @@ for model in models:
     if not benchmark_enabled: print("Inconsistent model! \nRepairing...")
 
     # Third, if it is not, proceed with the repairs and print out the necessary ones.
-    repair_start_time = time.time()
+    repair_start_time = time.monotonic()
     final_state = repair(model[0], inconsistencies, model_revision_stats)
-    repair_end_time = time.time()
+    repair_end_time = time.monotonic()
 
     total_repair_time = repair_end_time - repair_start_time
     
     if not benchmark_enabled and final_state == "repaired": print(f"Applying the above repairs to model {model[1]} will render it consistent!\n")
 
-  revision_end_time = time.time()
+  revision_end_time = time.monotonic()
   total_revision_time = revision_end_time - revision_start_time
 
   if benchmark_enabled:
