@@ -87,7 +87,7 @@ missing_node_regulator(ID,R) :- term(compound, ID, R), node_ID(ID), not node_reg
 extra_node_regulator(ID,R) :- node_regulator(ID, R), term(compound, ID, _), not term(compound, ID, R).
 
 %Count extra or missing nodes to assess the difference in number of terms with the original function
-missing_full_node(N) :- available_node_ID(N), not node_ID(N), function(compound, TERM_NO), N < TERM_NO.
+missing_full_node(N) :- available_node_ID(N), not node_ID(N), function(compound, TERM_NO), N <= TERM_NO.
 extra_full_node(N) :- node_ID(N), function(compound, TERM_NO), N > TERM_NO.
 
 %Test
@@ -138,16 +138,16 @@ regulator_inhibitor(C) :- node_regulator(N,C), inhibitor(C).
 
 %Optimize
 %1-Optimize for the minimum changes to number of terms (highest priority)
-#minimize{1@4,N : extra_full_node(N)}.
-#minimize{1@4,N : missing_full_node(N)}.
+#minimize{1@4, N : extra_full_node(N)}.
+#minimize{1@4, N : missing_full_node(N)}.
 
 %2-Optimize for the minimum changes to regulators
-#minimize{1@3,C : missing_regulator(C)}.
-#minimize{1@3,C : extra_regulator(C)}.
+#minimize{1@3, C : missing_regulator(C)}.
+#minimize{1@3, C : extra_regulator(C)}.
 
 %3-Optimize for the minimum changes to regulator signs 
-#minimize{1@2,C : sign_changed(C)}.
+#minimize{1@2, C : sign_changed(C)}.
 
 %4-Optimize for minimum changes to original node format
-#minimize{1@1,N,C : missing_node_regulator(N,C)}.
-#minimize{1@1,N,C : extra_node_regulator(N,C)}.
+#minimize{1@1, N,C : missing_node_regulator(N,C)}.
+#minimize{1@1, N,C : extra_node_regulator(N,C)}.
