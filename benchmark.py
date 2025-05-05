@@ -43,6 +43,9 @@ toggle_async = False
 parser = None
 args = None
 
+
+common_revision_args = []
+
 #Global logger (change logging.(LEVEL) to desired (LEVEL) )
 logging.basicConfig()
 global_logger = logging.getLogger("global")
@@ -66,9 +69,10 @@ def parseArgs():
   parser.add_argument("-stable", "--stable_state", action='store_true', help="Flag to benchmark using stable state observations (default).")
   parser.add_argument("-sync", "--synchronous", action='store_true', help="Flag to benchmark using synchronous observations (default is stable state).")
   parser.add_argument("-async", "--asynchronous", action='store_true', help="Flag to benchmark using asynchronous observations (default is stable state).")
+  parser.add_argument("-criteria", "--criteria", help="Comma separated list of the criteria to use to minimize changes (term-number,regulators,signs,term-format) in order of priotity. When specified, must include the 4 criteria. Default is term-number,regulators,signs,term-format.")
   args = parser.parse_args()
 
-  global config_path, obsv_path, model_name, save_folder
+  global config_path, obsv_path, model_name, save_folder, common_revision_args
   global toggle_stable_state, toggle_sync, toggle_async
 
   config_path = args.config_folder
@@ -105,6 +109,11 @@ def parseArgs():
     toggle_sync = False
     toggle_async = True
     logger.info("Mode used: Asynchronous \U0001f331")
+
+  if args.criteria:
+    common_revision_args.append('-criteria')
+    common_revision_args.append(args.criteria)
+
   return
 
 
@@ -183,7 +192,7 @@ for obsv in obsv_list:
     '-f', current_config_directory,
     '-o', current_observations,
     f'-{interaction_mode}',
-    '-bulk', '-benchmark_naming','-benchmark', save_folder])
+    '-bulk', '-benchmark_naming','-benchmark', save_folder] + common_revision_args)
     global_logger.info(f"Current progress: Obsv({current_obs_number}/{len(obsv_list)}) || Config({current_config_number}/{len(configs_list)})")
   current_config_number = 0
   

@@ -52,6 +52,8 @@ toggle_stable_state = True
 toggle_sync = False
 toggle_async = False
 
+min_change_criteria = ["term-number","regulators","signs","term-format"]
+
 #Parser
 parser = None
 args = None
@@ -82,11 +84,13 @@ def parseArgs():
   parser.add_argument("-bulk", "--bulk", action='store_true', help="Enables the revision of multiple models at once. (Note: the path provided to -f must be the directory containing those models).")
   parser.add_argument("-benchmark", "--benchmark_save_folder", help="Enables benchmark mode, saving at the specified path.")
   parser.add_argument("-benchmark_naming", "--benchmark_naming", action='store_true', help="Enables benchmark files to be saved with a more helpful name.")
+  parser.add_argument("-criteria", "--criteria", help="Comma separated list of the criteria to use to minimize changes (term-number,regulators,signs,term-format) in order of priotity. When specified, must include the 4 criteria. Default is term-number,regulators,signs,term-format.")
   args = parser.parse_args()
 
   global model_path, obsv_path, write_folder
   global toggle_stable_state, toggle_sync, toggle_async
   global bulk_enabled, benchmark_enabled, benchmark_naming
+  global min_change_criteria
 
   model_path = args.model_to_repair
   obsv_path = args.observations
@@ -99,6 +103,11 @@ def parseArgs():
   asynchronous = args.asynchronous
   bulk = args.bulk
   benchmark = args.benchmark_save_folder
+
+  if args.criteria:
+    custom_criteria = args.criteria.split(',')
+    assert all(x in custom_criteria for x in ["term-number","regulators","signs","term-format"]), "Invalid criteria specified. Must include all four: term-number,regulators,signs,term-format"
+    min_change_criteria = custom_criteria
 
   if bulk:
     bulk_enabled = bulk  
@@ -362,7 +371,7 @@ def repair(model, inconsistencies, revision_stats):
       upo = processPreviousObservations(prev_obs)
       
       compound_repair_start = time.monotonic()
-      functions, node_variation = generateFunctions(func, model, inconsistencies, upo,
+      functions, node_variation = generateFunctions(func, model, inconsistencies, upo, min_change_criteria,
         toggle_stable_state, toggle_sync, toggle_async)
       compound_repair_end = time.monotonic()
 

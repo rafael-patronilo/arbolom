@@ -95,7 +95,7 @@ def parseArgs():
   logger = logging.getLogger("parser")
   logger.setLevel(logging.INFO)
 
-  global parser, args
+  global parser, args #TODO add criteria order arg
 
   parser = argparse.ArgumentParser(description="Repair an inconsistent Boolean logical model in the BCF written in lp, given a set of observations and inconsistent compounds, both written in lp.")
   parser.add_argument("-f", "--model_to_repair", help="Path to model to check the consistency of.", required=True)

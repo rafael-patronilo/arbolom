@@ -1,5 +1,6 @@
 import time, clingo
 from aux_scripts.repair_constants import CHANGED_SIGNS, EXTRA_NODE_REGULATORS, EXTRA_REGULATORS, MISSING_NODE_REGULATORS, MISSING_REGULATORS
+from aux_scripts.repair_criteria import build_asp_change_criteria
 from aux_scripts.repair_prints import printStatistics
 
 #Path of the encodings to obtain inconsistent functions
@@ -127,13 +128,16 @@ def generateFunctions(func, model, incst, upo, toggle_stable_state, toggle_sync,
 # model - the model to revise
 # incst - the inconsistencies obtained from consistency checking
 # upo - unique positive observations that are obtained from processPreviousObservations
+# min_change_criteria - list of the change minimization criteria (term-number,regulators,signs,term-format) in order of priority.
 # toggle_stable_state - flag that enables stable state interaction
 # toggle_sync - flag that enables synchronous interaction
 # toggle_async - flag that enables asynchronous interaction
 # path_mode - flag that enables loading the model and inconsistencies from a file, instead of a string
 # enable_prints - enables additional prints
 #Purpose: Generates a function that is compatible with previously given observations, based on the obtained inconsistencies
-def generateFunctions(func, model, incst, upo, toggle_stable_state, toggle_sync, toggle_async, path_mode = False, enable_prints=False):
+def generateFunctions(func, model, incst, upo, min_change_criteria,
+                      toggle_stable_state, toggle_sync, toggle_async, 
+                      path_mode = False, enable_prints=False):
   if enable_prints: print("Calculating repairs...")
 
   #current_variation = 0
@@ -155,7 +159,7 @@ def generateFunctions(func, model, incst, upo, toggle_stable_state, toggle_sync,
 
   timeout_start = time.time()
   if enable_prints: print(f"Trying to find a solution with at most ({max_node_limit}) nodes...")
-  function = generateFunctionsClingo(max_node_limit, timeout_start, func, model, incst, upo_program, 
+  function = generateFunctionsClingo(max_node_limit, timeout_start, func, model, incst, upo_program, min_change_criteria,
                                      toggle_stable_state, toggle_sync, toggle_async, path_mode, enable_prints)
   if function == "timed_out": 
     if enable_prints: print(f"No solutions.")
@@ -243,13 +247,17 @@ def getFuncStatMap(function):
 # model - the model to revise
 # incst - the inconsistencies obtained from consistency checking
 # upo_program - the processed unique positive observations
+# min_change_criteria - list of the change minimization criteria (term-number,regulators,signs,term-format) in order of priority.
 # toggle_stable_state - flag that enables stable state interaction
 # toggle_sync - flag that enables synchronous interaction
 # toggle_async - flag that enables asynchronous interaction
 # path_mode - flag that enables loading the model and inconsistencies from a file, instead of a string
 # enable_prints - enables additional prints
 #Purpose: Calls clingo to solve the repair encoding
-def generateFunctionsClingo(node_number, timeout_start, func, model, incst, upo_program, toggle_stable_state, toggle_sync, toggle_async, path_mode = False, enable_prints=False):
+def generateFunctionsClingo(node_number, timeout_start, func, model,
+                             incst, upo_program, min_change_criteria,
+                             toggle_stable_state, toggle_sync, toggle_async, 
+                             path_mode = False, enable_prints=False):
   no_timeout = True
   clingo_args = ["0", f"-c compound={func}", f"-c max_node_number={node_number}"]
       
@@ -271,6 +279,10 @@ def generateFunctionsClingo(node_number, timeout_start, func, model, incst, upo_
   elif toggle_async:
     ctl.load(repair_encoding_async_path)
   
+  asp_min_criteria = build_asp_change_criteria(min_change_criteria, toggle_stable_state, toggle_sync, toggle_async)
+  if enable_prints: print(f"Change minimization criteria: {asp_min_criteria}")
+  ctl.add("base", [], program=asp_min_criteria)
+
   ctl.ground([("base", [])])
   function = []
 

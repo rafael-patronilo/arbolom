@@ -3,8 +3,19 @@
 %we must ensure that, at each time step, the compound's function
 %is able to replicate the observed state).
 
+%*--Input--*% 
+
+% Compound whose function is to be repaired
 #const compound = c.
+
+% Maximum number of nodes (terms of the disjunction) that can be used in the repaired function
 #const max_node_number = n.
+
+% Priorities for the optimization criteria
+#const term_number_change_p = 4.
+#const regulators_change_p = 3.
+#const signs_change_p = 2.
+#const term_format_change_p = 1.
 
 %*--Fixing regulators--*%
 %fixed/2 tells us that regulator C has to be one of the compound's regulators
@@ -137,17 +148,17 @@ regulator_inhibitor(C) :- node_regulator(N,C), inhibitor(C).
 
 
 %Optimize
-%1-Optimize for the minimum changes to number of terms (highest priority)
-#minimize{1@4, N : extra_full_node(N)}.
-#minimize{1@4, N : missing_full_node(N)}.
+%1-Optimize for the minimum changes to number of terms (highest priority by default)
+#minimize{1@node_number_change, N : extra_full_node(N)}.
+#minimize{1@node_number_change, N : missing_full_node(N)}.
 
 %2-Optimize for the minimum changes to regulators
-#minimize{1@3, C : missing_regulator(C)}.
-#minimize{1@3, C : extra_regulator(C)}.
+#minimize{1@regulators_change, C : missing_regulator(C)}.
+#minimize{1@regulators_change, C : extra_regulator(C)}.
 
 %3-Optimize for the minimum changes to regulator signs 
-#minimize{1@2, C : sign_changed(C)}.
+#minimize{1@regulators_sign_change, C : sign_changed(C)}.
 
 %4-Optimize for minimum changes to original node format
-#minimize{1@1, N,C : missing_node_regulator(N,C)}.
-#minimize{1@1, N,C : extra_node_regulator(N,C)}.
+#minimize{1@node_format_change, N,C : missing_node_regulator(N,C)}.
+#minimize{1@node_format_change, N,C : extra_node_regulator(N,C)}.
