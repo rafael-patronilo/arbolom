@@ -12,6 +12,8 @@ REPAIR_COLS = [
   'C. Extra Node Regulators'
 ]
 
+OBSV_TYPES = ["obs.lp","1-20", "1-3", "5-20", "5-3"]
+
 csv_folder : Path
 
 #---Argument parser---
@@ -30,7 +32,7 @@ def parseArgs():
 def printModelStateCounts(df : pd.DataFrame):
   model_state_counter = defaultdict(lambda:0)
 
-  for name, model_df in df.groupby('Model Name'):
+  for name, model_df in df.groupby(['Model Name', 'Obsv. Type']):
     model_state_counter[model_df['Model State'].iloc[0]] += 1
 
   print("Number of models per state:")
@@ -48,13 +50,18 @@ def printStatistics(df : pd.DataFrame):
   print(df.min())
 
 def printTimes(df : pd.DataFrame):
-  time_cols = [col for col in df.columns if 'Time' in col]
+  time_cols = [col for col in df.columns if 'Time' in col and col != "C. Repair Time"]
+  by_model = df.groupby(['Model Name', 'Obsv. Type']).first()
   print("Global Times")
-  printStatistics(df[time_cols])
+  printStatistics(by_model[time_cols])
+  printStatistics(df['C. Repair Time'])
   print()
-  for k, v in df.groupby('Model State'):
+  for k, v in df.groupby(['Model State']):
+    by_model = v.groupby(['Model Name', 'Obsv. Type']).first()
     print(f"Times for state {k}")
-    printStatistics(v[time_cols])
+    printStatistics(by_model[time_cols])
+    print("C. Repair Time")
+    printStatistics(v['C. Repair Time'])
     print()
 
 def printRepairs(df : pd.DataFrame):
@@ -62,11 +69,35 @@ def printRepairs(df : pd.DataFrame):
   print("Repair statistics (repaired compounds only)")
   printStatistics(repairs)
 
+def loadFiles() -> pd.DataFrame:
+  dfs = []
+  csvs = csv_folder.glob("*.csv")
+  if not csvs:
+    print(f"No CSV files found in {csv_folder}")
+    return
+  
+  for f in csvs:
+    o_type = None
+    for o_type_cand in OBSV_TYPES:
+      if o_type_cand in f.name:
+        o_type = o_type_cand
+        break
+    if o_type is None:
+      print(f"Skipping {f}: no observation type found")
+      continue
+    csv = pd.read_csv(f, sep=r',\s*', engine='python')
+    csv['Obsv. Type'] = o_type
+    if not isinstance(csv, pd.DataFrame):
+      print(f"Error reading {f}: {csv}")
+      continue
+    dfs.append(csv)
+  print(f"Loaded {len(dfs)} CSV files")
+  df = pd.concat(dfs, ignore_index=True)
+  return df
+
 def main():
   parseArgs()
-  def read_csv(file):
-    return pd.read_csv(file, sep=r',\s*', engine='python')
-  df = pd.concat(map(read_csv, csv_folder.glob('*.csv')), ignore_index=True)
+  df = loadFiles()
   printModelStateCounts(df)
   print('\n\n')
   printTimes(df)
