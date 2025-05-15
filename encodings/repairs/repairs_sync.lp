@@ -11,12 +11,6 @@
 % Maximum number of nodes (terms of the disjunction) that can be used in the repaired function
 #const max_node_number = n.
 
-% Priorities for the optimization criteria
-#const term_number_change_p = 4.
-#const regulators_change_p = 3.
-#const signs_change_p = 2.
-#const term_format_change_p = 1.
-
 %*--Fixing regulators--*%
 %fixed/2 tells us that regulator C has to be one of the compound's regulators
 fixed_regulator(C) :- fixed(C,compound), compound(C).
@@ -146,19 +140,3 @@ regulator_inhibitor(C) :- node_regulator(N,C), inhibitor(C).
 #show missing_full_node/1.
 #show extra_full_node/1.
 
-
-%Optimize
-%1-Optimize for the minimum changes to number of terms (highest priority by default)
-#minimize{1@node_number_change, N : extra_full_node(N)}.
-#minimize{1@node_number_change, N : missing_full_node(N)}.
-
-%2-Optimize for the minimum changes to regulators
-#minimize{1@regulators_change, C : missing_regulator(C)}.
-#minimize{1@regulators_change, C : extra_regulator(C)}.
-
-%3-Optimize for the minimum changes to regulator signs 
-#minimize{1@regulators_sign_change, C : sign_changed(C)}.
-
-%4-Optimize for minimum changes to original node format
-#minimize{1@node_format_change, N,C : missing_node_regulator(N,C)}.
-#minimize{1@node_format_change, N,C : extra_node_regulator(N,C)}.
