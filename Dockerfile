@@ -1,4 +1,4 @@
-FROM python:3.13.3
+FROM python:alpine
 RUN pip install clingo pandas natsort
 WORKDIR /workspace
 COPY . .
