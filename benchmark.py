@@ -34,6 +34,9 @@ obsv_path = None
 #Folder where the benchmark results will be saved to
 save_folder = None
 
+# Skip first n observation/config pairs, useful for resuming interrupted benchmarks
+skip_n_first = 0
+
 #Mode flags 
 toggle_stable_state = True
 toggle_sync = False
@@ -66,13 +69,14 @@ def parseArgs():
   requiredNamed.add_argument("-o", "--observations", help="Path of observations from real-world models.", required=True)
   requiredNamed.add_argument("-m", "--model_name", help="Name of the model to benchmark (doesn't need to be exact, just needs to be contained in it).", required=True)
   requiredNamed.add_argument("-s", "--save_folder", help="Path of folder to save benchmarks to.", required=True)
+  parser.add_argument("-skip", "--skip-n-first", type=int, default=0, help="An optional number of first observation/config pairs to skip at the beginning of the benchmark. Intended to help resume interrupted benchmarks.")
   parser.add_argument("-stable", "--stable_state", action='store_true', help="Flag to benchmark using stable state observations (default).")
   parser.add_argument("-sync", "--synchronous", action='store_true', help="Flag to benchmark using synchronous observations (default is stable state).")
   parser.add_argument("-async", "--asynchronous", action='store_true', help="Flag to benchmark using asynchronous observations (default is stable state).")
   parser.add_argument("-criteria", "--criteria", help="Comma separated list of the criteria to use to minimize changes (term-number,regulators,signs,term-format) in order of priotity. When specified, must include the 4 criteria. Default is term-number,regulators,signs,term-format.")
   args = parser.parse_args()
 
-  global config_path, obsv_path, model_name, save_folder, common_revision_args
+  global config_path, obsv_path, model_name, save_folder, skip_n_first, common_revision_args
   global toggle_stable_state, toggle_sync, toggle_async
 
   config_path = args.config_folder
@@ -113,6 +117,8 @@ def parseArgs():
   if args.criteria:
     common_revision_args.append('-criteria')
     common_revision_args.append(args.criteria)
+
+  skip_n_first = args.skip_n_first
 
   return
 
@@ -188,6 +194,10 @@ for obsv in obsv_list:
     current_config_directory = config
     revision_model_args = f"-f {current_config_directory}"
     
+    if skip_n_first > 0:
+      skip_n_first -= 1
+      global_logger.info(f"Skipping: Obsv({current_obs_number}/{len(obsv_list)}) || Config({current_config_number}/{len(configs_list)})")
+      continue
     subprocess.run(['python', 'revision.py', 
     '-f', current_config_directory,
     '-o', current_observations,
