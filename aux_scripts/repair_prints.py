@@ -1,3 +1,5 @@
+from pprint import pformat
+
 #Purpose: Prints the initial node generation phase message
 def printFuncRepairStart(current_function):
   print(f"\033[1;32m ----{current_function} REPAIR START----\033[0;37;40m")
@@ -16,7 +18,7 @@ def printIFTVEnd():
 
 #Inputs: The inconsistent function, and the resulting answer set obtained from clingo
 #Purpose: Prints the repairs in LP format
-def printRepairedLP(inconsistent_func, result, node_number_variation):
+def logRepairedLP(inconsistent_func, result, criteria_costs, to_stdout=True, logger = None):
   activators = ""
   inhibitors = ""
 
@@ -24,17 +26,13 @@ def printRepairedLP(inconsistent_func, result, node_number_variation):
   node_ID_map = {} 
   nodes = {}
 
-  missing_regulator_no = 0
-  extra_regulator_no = 0
-  sign_change_no = 0
-  missing_node_regulator_no = 0
-  extra_node_regulator_no = 0
-
   if result =="timed_out":
-    print("Timed out before determining consistent solutions...")
+    if logger: logger.error("Timed out before determining consistent solutions...")
+    if to_stdout: print("Timed out before determining consistent solutions...")
 
   elif result == "no_solution":
-    print("No possible repairs exist...")
+    if logger: logger.error("Timed out before determining consistent solutions...")
+    if to_stdout: print("No possible repairs exist...")
 
   else:
     for atom in result:
@@ -43,25 +41,8 @@ def printRepairedLP(inconsistent_func, result, node_number_variation):
 
       if "regulator_activator" in atom:
         activators += f"regulates({arguments[0]}, {inconsistent_func}, 0).\n"
-      
       elif "regulator_inhibitor" in atom:
         inhibitors += f"regulates({arguments[0]}, {inconsistent_func}, 1).\n"
-      
-      elif "missing_regulator" in atom:
-        missing_regulator_no += 1
-
-      elif "extra_regulator" in atom:
-        extra_regulator_no += 1
-
-      elif "sign_changed" in atom:
-        sign_change_no += 1
-
-      elif "missing_node_regulator" in atom:
-        missing_node_regulator_no += 1
-      
-      elif "extra_node_regulator" in atom:
-        extra_node_regulator_no += 1
-
       elif "node_regulator" in atom:
         unsorted_node_ID = arguments[0]
         regulator = arguments[1]
@@ -87,27 +68,32 @@ def printRepairedLP(inconsistent_func, result, node_number_variation):
       for reg in regulators:
         result += f"term({inconsistent_func}, {node_ID}, {reg}).\n"
     
-    print("\033[1;32mRepairs: \033[0;37;40m")
+    if to_stdout: 
+      print("\033[1;32mRepairs: \033[0;37;40m")
+      print(result)
 
-    print(result)
+    logChanges(criteria_costs, to_stdout=to_stdout, logger=logger)
 
-    printChanges(missing_regulator_no, extra_regulator_no, sign_change_no,
-      node_number_variation, missing_node_regulator_no, extra_node_regulator_no)
+    if logger: logger.info(f"Repairs for function {inconsistent_func}:\n{result}")
 
-def printChanges(missing_regulator_no, extra_regulator_no, sign_change_no,
-      node_number_change_no, missing_node_regulator_no, extra_node_regulator_no):
-  print("\033[1;32mNumber of repairs of each type: \033[0;37;40m")
-  print("Node number variation (final node number - original node number) - ", node_number_change_no)
-  print("Removed regulators - ", missing_regulator_no)
-  print("Added regulators - ", extra_regulator_no)
-  print("Changed regulator signs - ", sign_change_no)
-  print("Total regulators removed from nodes - ", missing_node_regulator_no)
-  print("Total regulators added to nodes - ", extra_node_regulator_no)
+def logChanges(criteria_costs, to_stdout=True, logger = None):
+  if to_stdout:
+    print("\033[1;32mNumber of repairs per criteria: \033[0;37;40m")
+    for crit, cost in criteria_costs:
+      print(f"{crit} - {cost}")
+
+  if logger: logger.info(f"Number of repairs per criteria:\n{pformat(criteria_costs)}")
 
 #Inputs: The stats dictionary returned from clingo
-def printStatistics(stats_dict):
+def printStatistics(stats_dict, print_func = None):
+  
   times = stats_dict["summary"]["times"]
-  print("\n<Statistics>")
-  print("Total: "+str(times["total"]) + "s (Solving: "+str(times["solve"])+"s)")
-  print("CPU Time: "+str(times["cpu"])+"s")
-  print("\n")
+  output = (
+    "\n<Statistics>\n"
+    "Total: "+str(times["total"]) + "s (Solving: "+str(times["solve"])+"s)\n"
+    "CPU Time: "+str(times["cpu"])+"s\n"
+    "\n")
+  if print_func:
+    print_func(output)
+  else:
+    print(output)

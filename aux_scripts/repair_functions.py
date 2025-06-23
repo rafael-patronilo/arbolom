@@ -1,3 +1,4 @@
+import math
 import time, clingo
 from aux_scripts.repair_constants import CHANGED_SIGNS, EXTRA_NODE_REGULATORS, EXTRA_REGULATORS, MISSING_NODE_REGULATORS, MISSING_REGULATORS
 from aux_scripts.repair_criteria import build_asp_change_criteria
@@ -53,76 +54,6 @@ def generateInconsistentFunctions(model, inconsistencies, debug_mode=False, path
   if enable_prints: printStatistics(ctl.statistics)
   return iftv
 
-'''
-#Inputs:
-# func - the name of the inconsistent function
-# model - the model to revise
-# incst - the inconsistencies obtained from consistency checking
-# upo - unique positive observations that are obtained from processPreviousObservations
-# toggle_stable_state - flag that enables stable state interaction
-# toggle_sync - flag that enables synchronous interaction
-# toggle_async - flag that enables asynchronous interaction
-# path_mode - flag that enables loading the model and inconsistencies from a file, instead of a string
-# enable_prints - enables additional prints
-#Purpose: Generates a function that is compatible with previously given observations, based on the obtained inconsistencies
-def generateFunctions(func, model, incst, upo, toggle_stable_state, toggle_sync, toggle_async, path_mode = False, enable_prints=False):
-  if enable_prints: print("Calculating optimal repairs...")
-
-  node_number = 1
-  solution_found = False
-  no_timeouts = True
-  functions = []
-  node_limit = 1
-  upo_program = ""
-
-  if upo:
-    upo_program = upo[0]
-    node_limit = upo[1]
-
-  timeout_start = time.time()
-  while not solution_found and no_timeouts and node_number <= node_limit:
-    clingo_args = ["0", f"-c compound={func}", f"-c node_number={node_number}"]
-      
-    ctl = clingo.Control(arguments=clingo_args, logger= lambda a,b: None)
-
-    ctl.add("base", [], program=upo_program)
-
-    if path_mode:
-      ctl.load(model)
-      ctl.load(incst) 
-    else: 
-      ctl.add("base", [], program=model)
-      ctl.add("base", [], program=incst)
-
-    if toggle_stable_state:
-      ctl.load(repair_encoding_stable_path)
-    elif toggle_sync:
-      ctl.load(repair_encoding_sync_path)
-    elif toggle_async:
-      ctl.load(repair_encoding_async_path)
-    
-    ctl.ground([("base", [])])
-    functions = []
-
-    with ctl.solve(yield_=True) as handle:
-      for model in handle:
-        functions = str(model).split(" ")
-
-    if functions:
-      solution_found = True
-    elif time.time() - timeout_start > 300:
-      no_timeouts = False
-    else:
-      node_number += 1
-  
-  if node_number > node_limit:
-    functions = "no_solution"
-
-  if enable_prints: print("... Done.")
-  if enable_prints: printStatistics(ctl.statistics)
-  return functions
-'''
-
 #Inputs:
 # func - the name of the inconsistent function
 # model - the model to revise
@@ -137,8 +68,8 @@ def generateFunctions(func, model, incst, upo, toggle_stable_state, toggle_sync,
 #Purpose: Generates a function that is compatible with previously given observations, based on the obtained inconsistencies
 def generateFunctions(func, model, incst, upo, min_change_criteria,
                       toggle_stable_state, toggle_sync, toggle_async, 
-                      path_mode = False, enable_prints=False):
-  if enable_prints: print("Calculating repairs...")
+                      path_mode = False, logger=None):
+  if logger: logger.debug("Calculating repairs...")
 
   #current_variation = 0
   #final_variation = 0
@@ -146,30 +77,23 @@ def generateFunctions(func, model, incst, upo, min_change_criteria,
   upo_program = ""
   if upo : upo_program = upo[0]
 
-  def countNodeVariation(function):
-    variation = 0
-    for atom in function:
-      if 'extra_full_node' in atom:
-        variation += 1
-      elif 'missing_full_node' in atom:
-        variation -= 1
-    return variation
-
   _, max_node_limit = determineStartNodesAndLimit(func,model,upo,path_mode)
-
+  if logger: 
+    logger.debug(f"Trying to find a solution with at most ({max_node_limit}) nodes...")
+    if math.isinf(max_node_limit): logger.error("Node limit is infinite")
   timeout_start = time.time()
-  if enable_prints: print(f"Trying to find a solution with at most ({max_node_limit}) nodes...")
-  function = generateFunctionsClingo(max_node_limit, timeout_start, func, model, incst, upo_program, min_change_criteria,
-                                     toggle_stable_state, toggle_sync, toggle_async, path_mode, enable_prints)
+  function, costs = generateFunctionsClingo(max_node_limit, timeout_start, func, model, incst, upo_program, min_change_criteria,
+                                     toggle_stable_state, toggle_sync, toggle_async, path_mode, logger)
   if function == "timed_out": 
-    if enable_prints: print(f"No solutions.")
-    return function, 0
+    if logger: logger.debug(f"No solutions.")
+    return function, None
   elif function:
-    if enable_prints: print("... Done.")
-    return function, countNodeVariation(function)
+    if logger: logger.debug("... Done.")
+    assert costs is not None
+    return function, costs
   else:
-    if enable_prints: print(f"No solutions.")
-    return "no_solution", 0
+    if logger: logger.debug(f"No solutions.")
+    return "no_solution", None
 
 #Inputs:
 # function_above - the function with original number of nodes + variation
@@ -257,7 +181,7 @@ def getFuncStatMap(function):
 def generateFunctionsClingo(node_number, timeout_start, func, model,
                              incst, upo_program, min_change_criteria,
                              toggle_stable_state, toggle_sync, toggle_async, 
-                             path_mode = False, enable_prints=False):
+                             path_mode = False, logger=None):
   no_timeout = True
   clingo_args = ["0", f"-c compound={func}", f"-c max_node_number={node_number}"]
       
@@ -280,15 +204,17 @@ def generateFunctionsClingo(node_number, timeout_start, func, model,
     ctl.load(repair_encoding_async_path)
   
   asp_min_criteria = build_asp_change_criteria(min_change_criteria, toggle_stable_state, toggle_sync, toggle_async)
-  if enable_prints: print(f"Change minimization criteria: {asp_min_criteria}")
+  if logger: logger.debug(f"Change minimization criteria: {asp_min_criteria}")
   ctl.add("base", [], program=asp_min_criteria)
 
   ctl.ground([("base", [])])
   function = []
+  costs = None
 
   def on_model(m):
-    nonlocal function
+    nonlocal function, costs
     function = str(m).split(" ")
+    costs = m.cost
 
   with ctl.solve(on_model=on_model, async_=True) as handle:
     no_timeout = handle.wait(repair_timeout - (time.time() - timeout_start))
@@ -297,8 +223,8 @@ def generateFunctionsClingo(node_number, timeout_start, func, model,
   if not no_timeout:
     function = "timed_out" 
   
-  if enable_prints: printStatistics(ctl.statistics)
-  return function
+  if logger: logger.debug(ctl.statistics)
+  return function, costs
 
 #Inputs:
 # func - the inconsistent function
@@ -376,7 +302,7 @@ def processInconsistentFunctions(inconsistent_functions, enable_prints=False):
 # path_mode - flag that enables loading the inconsistencies from a file, instead of a string
 #Purpose: Returns observations that happen in the timestep before
 # positive observations (the observations are contained in inconsistencies)
-def generatePreviousObservations(func, inconsistencies, toggle_sync, toggle_async, path_mode=False, enable_prints=False):
+def generatePreviousObservations(func, inconsistencies, toggle_sync, toggle_async, path_mode=False, logger=None):
   clingo_args = ["0", f"-c compound={func}"]
   
   ctl = clingo.Control(arguments=clingo_args)
@@ -396,15 +322,15 @@ def generatePreviousObservations(func, inconsistencies, toggle_sync, toggle_asyn
   ctl.ground([("base", [])])
   functions = []
 
-  if enable_prints: print("Calculating previous observations...")
+  if logger: logger.debug("Calculating previous observations...")
 
   with ctl.solve(yield_=True) as handle:
     for model in handle:
       functions = str(model).split(" ")
 
-  if enable_prints: print("... Done.")
+  if logger: logger.debug("... Done.")
 
-  if enable_prints: printStatistics(ctl.statistics)
+  if logger: printStatistics(ctl.statistics, print_func=logger.debug)
 
   if not functions[0]: #If there are no previous observations
     return []
@@ -415,7 +341,7 @@ def generatePreviousObservations(func, inconsistencies, toggle_sync, toggle_asyn
 # -prev_obs, a string containing all previous observations
 #Purpose: Returns a tuple with all unique positive observations,
 # and the total number of unique positive observations
-def processPreviousObservations(prev_obs, enable_prints=False):
+def processPreviousObservations(prev_obs, logger=None):
 
   if not prev_obs:
     return ""
@@ -475,6 +401,6 @@ def processPreviousObservations(prev_obs, enable_prints=False):
     output += "unique_positive_observation(" + value + ").\n"
 
   end = time.time()
-  if enable_prints: print(f"Python code time for unique positive observations: {end - start}s\n")
+  if logger: logger.debug(f"Python code time for unique positive observations: {end - start}s\n")
   total_upos = len(uniques_map.values())
   return (output, total_upos)

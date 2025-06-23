@@ -5,6 +5,8 @@ from aux_scripts.conversion_functions import *
 from aux_scripts.repair_constants import *
 from aux_scripts.repair_functions import *
 from aux_scripts.repair_prints import *
+from aux_scripts.repair_criteria import CRITERIA, print_criteria
+from collections import OrderedDict
 
 #Usage: $python revision.py -f (FILENAME) -o (OBSERVATIONS) -stable -sync -async -bulk -benchmark (SAVE_PATH)
 #Optional flags:
@@ -29,6 +31,8 @@ model_path = None
 #Paths of encodings with observations
 obsv_path = None
 
+repair_save_path = None
+
 #Flag that enables the revision of multiple models at once
 bulk_enabled = False
 
@@ -45,7 +49,7 @@ benchmark_enabled = False
 benchmark_naming = False
 
 #Benchmark save path
-write_folder = "None"
+benchmakr_write_folder = "None"
 
 #Mode flags 
 toggle_stable_state = True
@@ -59,9 +63,11 @@ parser = None
 args = None
 
 #Global logger (change logging.(LEVEL) to desired (LEVEL) )
-logging.basicConfig()
+logging.basicConfig(filename='revision.log',
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S',
+                    level=logging.DEBUG)
 global_logger = logging.getLogger("global")
-global_logger.setLevel(logging.INFO)
 
 
 
@@ -78,22 +84,31 @@ def parseArgs():
   requiredNamed = parser.add_argument_group("required arguments")
   requiredNamed.add_argument("-f", "--model_to_repair", help="Path of model to revise.", required=True)
   requiredNamed.add_argument("-o", "--observations", help="Path of observations from real-world model.", required=True)
+  requiredNamed.add_argument("-s", "--save_path", help="Path to save repaired function to. If a directory is passed, a file with same name as the original funcion will be created there.", default=None)
   parser.add_argument("-stable", "--stable_state", action='store_true', help="Flag to check the consistency using stable state observations (default).")
   parser.add_argument("-sync", "--synchronous", action='store_true', help="Flag to check the consistency using synchronous observations (default is stable state).")
   parser.add_argument("-async", "--asynchronous", action='store_true', help="Flag to check the consistency using asynchronous observations (default is stable state).")
   parser.add_argument("-bulk", "--bulk", action='store_true', help="Enables the revision of multiple models at once. (Note: the path provided to -f must be the directory containing those models).")
-  parser.add_argument("-benchmark", "--benchmark_save_folder", help="Enables benchmark mode, saving at the specified path.")
+  parser.add_argument("-benchmark", "--benchmark_save_folder", help="Enables benchmark mode, saving benchmark results at the specified path.")
   parser.add_argument("-benchmark_naming", "--benchmark_naming", action='store_true', help="Enables benchmark files to be saved with a more helpful name.")
-  parser.add_argument("-criteria", "--criteria", help="Comma separated list of the criteria to use to minimize changes (term-number,regulators,signs,term-format) in order of priotity. When specified, must include the 4 criteria. Default is term-number,regulators,signs,term-format.")
+  parser.add_argument("-criteria", "--criteria", default="term-number,regulators,signs,term-format",
+                      help="Comma separated list of the criteria to use to minimize changes, in order of priority. For the list of available criteria use --help-criteria. Default is %(default)s.")
+  parser.add_argument("-help-criteria", "--help-criteria", action='store_true', help="Prints the available criteria to the console and exits.")
   args = parser.parse_args()
 
-  global model_path, obsv_path, write_folder
+  logger.info(f"Received arguments: {args}")
+
+  if args.help_criteria:
+    print_criteria()
+    exit(0)
+  global model_path, obsv_path, benchmakr_write_folder
   global toggle_stable_state, toggle_sync, toggle_async
   global bulk_enabled, benchmark_enabled, benchmark_naming
   global min_change_criteria
 
   model_path = args.model_to_repair
   obsv_path = args.observations
+  repair_save_path = args.save_path
 
   logger.debug("Obtained model: " + model_path)
   logger.debug("Obtained observations: " + obsv_path)
@@ -106,7 +121,8 @@ def parseArgs():
 
   if args.criteria:
     custom_criteria = args.criteria.split(',')
-    assert all(x in custom_criteria for x in ["term-number","regulators","signs","term-format"]), "Invalid criteria specified. Must include all four: term-number,regulators,signs,term-format"
+    for x in custom_criteria:
+      assert x in CRITERIA, f"Invalid criterion specified: {x}. Use --help-criteria to see available criteria."
     min_change_criteria = custom_criteria
 
   if bulk:
@@ -115,10 +131,10 @@ def parseArgs():
   if benchmark:
     benchmark_enabled = True
     if isdir(benchmark):
-      write_folder = benchmark
+      benchmakr_write_folder = benchmark
     else:
       logger.info("Specified save location is not a valid directory. Saving in model directory instead.")
-      write_folder = os.path.dirname(model_path)
+      benchmakr_write_folder = os.path.dirname(model_path)
 
   if args.benchmark_naming: 
     benchmark_naming = True
@@ -131,19 +147,19 @@ def parseArgs():
     toggle_stable_state = True
     toggle_sync = False
     toggle_async = False
-    if not benchmark_naming: logger.info("Mode used: Stable State \U0001f6d1")
+    logger.info("Mode used: Stable State \U0001f6d1")
 
   elif synchronous:
     toggle_stable_state = False
     toggle_sync = True
     toggle_async = False
-    if not benchmark_naming: logger.info("Mode used: Synchronous \U0001f550")
+    logger.info("Mode used: Synchronous \U0001f550")
 
   elif asynchronous:
     toggle_stable_state = False
     toggle_sync = False
     toggle_async = True
-    if not benchmark_naming: logger.info("Mode used: Asynchronous \U0001f331")
+    logger.info("Mode used: Asynchronous \U0001f331")
   return
 
 
@@ -202,24 +218,20 @@ def getCompoundTermNumber(model, compound):
 #Purpose: Initializes and returns the map containing the statistics of each 
 # function's changes after being repaired
 def initRevisionStatsMap(model):
-  revision_stats_map = {}
+  revision_stats_map = OrderedDict()
   all_compounds = sorted(getModelCompounds(model))
 
   for compound in all_compounds:
     regulator_number = getCompoundRegulatorNumber(model, compound)
     node_number = getCompoundTermNumber(model, compound)
 
-    revision_stats_map[compound] = {}
+    revision_stats_map[compound] = OrderedDict()
     revision_stats_map[compound][FINAL_STATE] = "consistent"
     revision_stats_map[compound][ORIGINAL_REGULATOR_NUMBER] = regulator_number
     revision_stats_map[compound][ORIGINAL_NODE_NUMBER] = node_number
-    revision_stats_map[compound][REPAIR_TIME] = 0
-    revision_stats_map[compound][NODE_VARIATION] = 0
-    revision_stats_map[compound][MISSING_REGULATORS] = 0
-    revision_stats_map[compound][EXTRA_REGULATORS] = 0
-    revision_stats_map[compound][CHANGED_SIGNS] = 0
-    revision_stats_map[compound][MISSING_NODE_REGULATORS] = 0
-    revision_stats_map[compound][EXTRA_NODE_REGULATORS] = 0
+    revision_stats_map[compound][BCHMARK_COMPOUND_REPAIR_TIME] = 0.0
+    for crit in min_change_criteria:
+      revision_stats_map[compound][crit] = 0
 
   return revision_stats_map
 
@@ -242,15 +254,7 @@ def fillBenchmarkArray(benchmark_array, model_name, final_state,
       (model_name, 
       final_state, revision_time,
       consistency_time, repair_time,
-      func, model_revision_stats[func][FINAL_STATE],
-      model_revision_stats[func][ORIGINAL_REGULATOR_NUMBER],
-      model_revision_stats[func][ORIGINAL_NODE_NUMBER],
-      model_revision_stats[func][REPAIR_TIME],
-      model_revision_stats[func][NODE_VARIATION],
-      model_revision_stats[func][MISSING_REGULATORS], model_revision_stats[func][EXTRA_REGULATORS],
-      model_revision_stats[func][CHANGED_SIGNS],
-      model_revision_stats[func][MISSING_NODE_REGULATORS],
-      model_revision_stats[func][EXTRA_NODE_REGULATORS]
+      func, *model_revision_stats[func].values()
       )
     )
 
@@ -265,29 +269,18 @@ def fillBenchmarkArray(benchmark_array, model_name, final_state,
 # -model_revision_stats - the map containing the changes done to each repaired
 #   function
 #Purpose: updates the map with the results from function repair
-def processFunctionRepairStats(func, func_state, node_variation, repairs, repair_time, revision_stats):
+def processFunctionRepairStats(func, func_state, criteria_costs, repairs, repair_time, revision_stats):
   revision_stats[func][FINAL_STATE] = func_state
-  revision_stats[func][NODE_VARIATION] = node_variation
-  revision_stats[func][REPAIR_TIME] = repair_time
+  revision_stats[func][BCHMARK_COMPOUND_REPAIR_TIME] = repair_time
 
-  for atom in repairs:
-      if "missing_regulator" in atom:
-        revision_stats[func][MISSING_REGULATORS] += 1 
-      elif "extra_regulator" in atom:
-        revision_stats[func][EXTRA_REGULATORS] += 1 
-      elif "sign_changed" in atom:
-        revision_stats[func][CHANGED_SIGNS] += 1 
-      elif "missing_node_regulator" in atom: 
-        revision_stats[func][MISSING_NODE_REGULATORS] += 1 
-      elif "extra_node_regulator" in atom:
-        revision_stats[func][EXTRA_NODE_REGULATORS] += 1 
+  for crit, cost in criteria_costs:
+      revision_stats[func][crit] = cost
 
 #Input: array - the array containing the lines with benchmark results
 #  to write on the output file
 #Purpose: Saves the results from benchmarking in the specified save_path
 def saveBenchmark(array):
   logger = logging.getLogger("saveBenchmark")
-  logger.setLevel(logging.INFO)
 
   filename = None
   if benchmark_naming:
@@ -304,8 +297,8 @@ def saveBenchmark(array):
     filename += "-async_benchmark.csv"
   
   save_path = None
-  if write_folder:
-    save_path = os.path.join(write_folder, filename)
+  if benchmakr_write_folder:
+    save_path = os.path.join(benchmakr_write_folder, filename)
   else:
     save_path = os.path.join(os.path.dirname(model_path), filename)
     if bulk_enabled:
@@ -325,7 +318,7 @@ def saveBenchmark(array):
     f.write("\n")
   f.close()
 
-  if not benchmark_naming: logger.info("Saved benchmark to: " + str(save_path))
+  logger.info("Saved benchmark to: " + str(save_path))
 
 
 
@@ -336,7 +329,6 @@ def saveBenchmark(array):
 #Purpose: returns the inconsistencies found in the model
 def checkConsistency(model, obsv):
   logger = logging.getLogger("checkConsistency")
-  logger.setLevel(logging.INFO)
 
   atoms = consistencyCheck(model,obsv,
     toggle_stable_state,toggle_sync,toggle_async)
@@ -344,6 +336,7 @@ def checkConsistency(model, obsv):
   inconsistencies = isConsistent(atoms, toggle_stable_state, 
     toggle_sync, toggle_async, print_consistent=not benchmark_enabled)
 
+  
   logger.debug("inconsistencies: \n" + str(inconsistencies))
   return inconsistencies 
 
@@ -365,29 +358,35 @@ def repair(model, inconsistencies, revision_stats):
     for func in i_f_array:
       func_state = "repaired"
       if not benchmark_enabled: printFuncRepairStart(func)
-
+      func_logger = logging.getLogger(func)
+      func_logger.info(f"Beginning repairs for function {func}")
       prev_obs = generatePreviousObservations(func, inconsistencies, 
-        toggle_sync, toggle_async)
-      upo = processPreviousObservations(prev_obs)
+        toggle_sync, toggle_async, logger = func_logger)
+      upo = processPreviousObservations(prev_obs, logger = func_logger)
       
       compound_repair_start = time.monotonic()
-      functions, node_variation = generateFunctions(func, model, inconsistencies, upo, min_change_criteria,
-        toggle_stable_state, toggle_sync, toggle_async)
+      functions, costs = generateFunctions(func, model, inconsistencies, upo, min_change_criteria,
+        toggle_stable_state, toggle_sync, toggle_async, logger = func_logger)
       compound_repair_end = time.monotonic()
+      
 
       if functions == "timed_out": 
         timed_out_functions.append(func)
         func_state = "inconsistent (timed out)"
-        node_variation = 0
-
       elif functions == "no_solution": 
         unrepairable_functions.append(func)
         func_state = "inconsistent (no solution)"
-        node_variation = 0
+      else:
+        assert costs is not None
+      func_logger.info(f"Completed repairing of {func}, final state: {func_state}")
 
-      processFunctionRepairStats(func, func_state, node_variation, functions, compound_repair_end - compound_repair_start, revision_stats)
+      if costs is None:
+        costs = [float('nan')] * len(min_change_criteria)
+      criteria_costs = list(zip(min_change_criteria, costs))
 
-      if not benchmark_enabled: printRepairedLP(func, functions, node_variation)
+      processFunctionRepairStats(func, func_state, criteria_costs, functions, compound_repair_end - compound_repair_start, revision_stats)
+
+      logRepairedLP(func, functions, criteria_costs, to_stdout=not benchmark_enabled, logger=func_logger)
       if not benchmark_enabled: printFuncRepairEnd(func)
     
   if timed_out_functions and unrepairable_functions:
@@ -413,11 +412,8 @@ benchmark_array = [(BCHMRK_MODEL_NAME,
   BCHMARK_ORIGINAL_REGULATOR_NO,
   BCHMARK_ORIGINAL_NODE_NO,
   BCHMARK_COMPOUND_REPAIR_TIME,
-  BCHMRK_COMPOUND_NODE_VARIATION,
-  BCHMRK_COMPOUND_MISSING_REGULATORS, BCHMRK_COMPOUND_EXTRA_REGULATORS,
-  BCHMRK_COMPOUND_CHANGED_SIGNS,
-  BCHMRK_COMPOUND_MISSING_NODE_REGULATORS,
-  BCHMRK_COMPOUND_EXTRA_NODE_REGULATORS)]
+  *min_change_criteria
+  )]
 
 for model in models:
   final_state = "consistent"
@@ -429,6 +425,7 @@ for model in models:
   model_revision_stats = initRevisionStatsMap(model[0])
 
   if bulk_enabled and not benchmark_enabled: print("Currently revising model ", model[1])
+  global_logger.info(f"Currently revising model {model[1]}")
 
   consistency_start_time = time.monotonic()
   inconsistencies = checkConsistency(model[0], obsv_path)
@@ -440,6 +437,7 @@ for model in models:
   # and time step. If the model is consistent, print a message saying so.
   if inconsistencies:
     if not benchmark_enabled: print("Inconsistent model! \nRepairing...")
+    global_logger.info(f"Currently revising model {model[1]}")
 
     # Third, if it is not, proceed with the repairs and print out the necessary ones.
     repair_start_time = time.monotonic()
@@ -461,5 +459,7 @@ for model in models:
 
 if benchmark_enabled:
   saveBenchmark(benchmark_array)
+else:
+  global_logger.info("Benchmarking disabled, not saving.")
 
 

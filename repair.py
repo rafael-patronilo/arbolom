@@ -167,7 +167,7 @@ if cmd_enabled:
       functions, node_variation = generateFunctions(func, model_path, incst_path, upo,
         toggle_stable_state, toggle_sync, toggle_async, True, True)
 
-      printRepairedLP(func, functions, node_variation)
+      logRepairedLP(func, functions, node_variation)
       
       printFuncRepairEnd(func)
 

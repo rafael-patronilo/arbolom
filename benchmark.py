@@ -5,6 +5,7 @@ from aux_scripts.consistency_functions import *
 from aux_scripts.conversion_functions import *
 from aux_scripts.repair_functions import *
 from aux_scripts.repair_prints import *
+from aux_scripts.repair_criteria import print_criteria
 
 #Usage: $python benchmark.py -f (CONFIG_FOLDER) -o (OBSERVATION_FOLDER) -m (MODEL_NAME) -s (SAVE_FOLDER) -stable -sync -async
 #Optional flags:
@@ -73,9 +74,14 @@ def parseArgs():
   parser.add_argument("-stable", "--stable_state", action='store_true', help="Flag to benchmark using stable state observations (default).")
   parser.add_argument("-sync", "--synchronous", action='store_true', help="Flag to benchmark using synchronous observations (default is stable state).")
   parser.add_argument("-async", "--asynchronous", action='store_true', help="Flag to benchmark using asynchronous observations (default is stable state).")
-  parser.add_argument("-criteria", "--criteria", help="Comma separated list of the criteria to use to minimize changes (term-number,regulators,signs,term-format) in order of priotity. When specified, must include the 4 criteria. Default is term-number,regulators,signs,term-format.")
+  parser.add_argument("-criteria", "--criteria", default="term-number,regulators,signs,term-format",
+                      help="Comma separated list of the criteria to use to minimize changes, in order of priority. For the list of available criteria use --help-criteria. Default is %(default)s.")
+  parser.add_argument("-help-criteria", "--help-criteria", action='store_true', help="Prints the available criteria to the console and exits.")
   args = parser.parse_args()
 
+  if args.help_criteria:
+    print_criteria()
+    exit(0)
   global config_path, obsv_path, model_name, save_folder, skip_n_first, common_revision_args
   global toggle_stable_state, toggle_sync, toggle_async
 

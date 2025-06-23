@@ -4,3 +4,4 @@ __pycache__/common.cpython-38.pyc
 *.pyc
 .pyvenv/
 demo/
+*.log
