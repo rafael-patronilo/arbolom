@@ -2,15 +2,16 @@ import argparse
 from pathlib import Path
 import pandas as pd
 from collections import defaultdict
+from repair_criteria import CRITERIA
 
-REPAIR_COLS = [
+REPAIR_COLS = {
   'C. Node Variation', 
   'C. Missing Regulators', 
   'C. Extra Regulators', 
   'C. Changed Signs',
   'C. Missing Node Regulators',
   'C. Extra Node Regulators'
-]
+} | CRITERIA.keys()
 
 OBSV_TYPES = ["obs.lp","1-20", "1-3", "5-20", "5-3"]
 
@@ -65,7 +66,8 @@ def printTimes(df : pd.DataFrame):
     print()
 
 def printRepairs(df : pd.DataFrame):
-  repairs = df[df['Compound State'] == 'repaired'][REPAIR_COLS]
+  repair_cols = [col for col in df.columns if col in REPAIR_COLS]
+  repairs = df[df['Compound State'] == 'repaired'][repair_cols]
   print("Repair statistics (repaired compounds only)")
   printStatistics(repairs)
 

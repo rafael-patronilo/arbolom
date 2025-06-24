@@ -87,8 +87,6 @@ CRITERIA["terms"] = CRITERIA["term-number"].combine(
 )
 
 def build_asp_change_criteria(criteria : list[str], toggle_stable_state, toggle_sync, toggle_async) -> str:
-    if not toggle_sync or toggle_stable_state or toggle_async:
-        raise NotImplementedError("Mode not implemented yet")
     asp_criteria = []
     for i, c in enumerate(criteria):
         priority = len(criteria) - i

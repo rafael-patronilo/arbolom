@@ -1,6 +1,6 @@
 
 *.ini
-__pycache__/common.cpython-38.pyc
+__pycache__/
 *.pyc
 .pyvenv/
 demo/

@@ -6,7 +6,7 @@
 %that imply that the compound's function was activated).
 
 #const compound = c.
-#const node_number = n.
+#const max_max_node_number = n.
 
 %*--Fixing regulators--*%
 %fixed/2 tells us that regulator C has to be one of the compound's regulators
@@ -30,14 +30,14 @@ inhibitor(C) :- fixed_inhibitor(C).
 %Original node IDs must always be available 
 %(so that we are able to make as little changes to the format of the original 
 %nodes as possible, using optimizations #3). Note that we cannot simply 
-%create all IDs using 1..node_number, since node_number may be smaller than
+%create all IDs using 1..max_node_number, since max_node_number may be smaller than
 %the number of original nodes. This would cause us to potentially leave out 
 %some original nodes when optimizing the format of our solution nodes
 available_node_ID(1..TERM_NO) :- function(compound, TERM_NO).
 
 %If we require more IDs than those that were originally available,
 %create them
-available_node_ID(TERM_NO + 1..node_number):- function(compound, TERM_NO), node_number > TERM_NO.
+available_node_ID(1..max_node_number):- function(compound, TERM_NO), max_node_number > TERM_NO.
 
 %Distribute compounds across available IDs
 {node_regulator(N,C) : compound(C)} :- available_node_ID(N).
@@ -66,28 +66,10 @@ original_regulator(C) :- regulates(C,compound,_).
 %If a regulator C is present in node N, then we define it as a present_regulator
 present_regulator(C) :- node_regulator(N,C).
 
-%If an original regulator C is not present in any node, we define it as a missing_regulator
-missing_regulator(C) :- original_regulator(C), not present_regulator(C).
-
-%If a present regulator C is not one of the original regulators, we define it as an extra_regulator
-extra_regulator(C) :- not original_regulator(C), present_regulator(C).
-
 %*--Identifying sign changes (minimization #2)--*%
 %(used in minimization #2)
 sign_changed(C) :- regulates(C,compound,0), inhibitor(C).
 sign_changed(C) :- regulates(C,compound,1), activator(C).
-
-%*--Identifying node format changes (optimizations #3)--*%
-%If we have a regulator R in term ID of compound's original function, but our
-%solution does not have regulator R in the node with the same ID, then that node
-%has a missing regulator
-missing_node_regulator(ID,R) :- term(compound, ID, R), node_ID(ID), not node_regulator(ID, R).
-
-%If we have a regulator R in node ID, but our original function does not have 
-%regulator R in the term with the same ID, then that node has an
-%extra regulator
-extra_node_regulator(ID,R) :- node_regulator(ID, R), term(compound, ID, _), not term(compound, ID, R).
-
 
 %Test
 %We're only interested in generating nodes that can be used to explain the observations,
@@ -109,9 +91,9 @@ extra_node_regulator(ID,R) :- node_regulator(ID, R), term(compound, ID, _), not 
 %5-Fixed regulators must be present in the final solution
 :- fixed_regulator(C), not node_regulator(_,C).
 
-%6-We must always have node_number nodes in our solution
-:- node_number != #count{N : node_regulator(N,R)}.
-
+%6-Used node IDs must be continuous
+% In other words, if an available id higher than another availabe id is used than the lower id must also be used
+:- available_node_ID(N1), available_node_ID(N2), N1 < N2, nodeID(N2), not node_ID(N1).
 
 %Display
 regulator_activator(C) :- node_regulator(N,C), activator(C).
@@ -121,22 +103,3 @@ regulator_inhibitor(C) :- node_regulator(N,C), inhibitor(C).
 #show regulator_activator/1.
 #show regulator_inhibitor/1.
 #show node_regulator/2.
-
-#show missing_regulator/1.
-#show extra_regulator/1.
-#show sign_changed/1.
-#show missing_node_regulator/2.
-#show extra_node_regulator/2.
-
-
-%Optimize
-%1-Optimize for the minimum changes to regulators (highest priority)
-#minimize{1@3,C : missing_regulator(C)}.
-#minimize{1@3,C : extra_regulator(C)}.
-
-%2-Optimize for the minimum changes to regulator signs 
-#minimize{1@2,C : sign_changed(C)}.
-
-%3-Optimize for minimum changes to original node format
-#minimize{1@1,N,C : missing_node_regulator(N,C)}.
-#minimize{1@1,N,C : extra_node_regulator(N,C)}.
