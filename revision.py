@@ -56,7 +56,7 @@ toggle_stable_state = True
 toggle_sync = False
 toggle_async = False
 
-min_change_criteria = ["term-number","regulators","signs","term-format"]
+min_change_criteria = ["term-number", "regulators", "signs", "term-format"]
 
 #Parser
 parser = None
@@ -76,7 +76,6 @@ global_logger = logging.getLogger("global")
 #Purpose: Parses the arguments of function repair
 def parseArgs():
   logger = logging.getLogger("parser")
-  logger.setLevel(logging.INFO)
 
   global parser, args
 
@@ -108,7 +107,6 @@ def parseArgs():
 
   model_path = args.model_to_repair
   obsv_path = args.observations
-  repair_save_path = args.save_path
 
   logger.debug("Obtained model: " + model_path)
   logger.debug("Obtained observations: " + obsv_path)
@@ -170,7 +168,6 @@ def parseArgs():
 #in the second position
 def readModels():
   logger = logging.getLogger("readModels")
-  logger.setLevel(logging.INFO)
 
   input_model_list = [model_path]
   output_model_list = []
@@ -337,7 +334,10 @@ def checkConsistency(model, obsv):
     toggle_sync, toggle_async, print_consistent=not benchmark_enabled)
 
   
-  logger.debug("inconsistencies: \n" + str(inconsistencies))
+  if inconsistencies is None:
+    logger.debug("No inconsistencies found")
+  else:
+    logger.debug("Inconsistencies found")
   return inconsistencies 
 
 #Inputs: 
@@ -400,66 +400,74 @@ def repair(model, inconsistencies, revision_stats):
 
 
 
-#-----Main-----
-parseArgs()
-# First, obtain the model in .lp model. If the obtained file has .bnet
-# extension, it must be converted to .lp.
-models = readModels()
-benchmark_array = [(BCHMRK_MODEL_NAME, 
-  BCHMRK_MODEL_STATE, BCHMRK_MODEL_REVISION_TIME,
-  BCHMRK_MODEL_CONSISTENCY_TIME, BCHMRK_MODEL_REPAIR_TIME,
-  BCHMRK_COMPOUND_NAME, BCHMRK_COMPOUND_STATE,
-  BCHMARK_ORIGINAL_REGULATOR_NO,
-  BCHMARK_ORIGINAL_NODE_NO,
-  BCHMARK_COMPOUND_REPAIR_TIME,
-  *min_change_criteria
-  )]
+def main():
+  global global_logger, model_path, obsv_path, repair_save_path
+  parseArgs()
+  # First, obtain the model in .lp model. If the obtained file has .bnet
+  # extension, it must be converted to .lp.
+  models = readModels()
+  benchmark_array = [(BCHMRK_MODEL_NAME, 
+    BCHMRK_MODEL_STATE, BCHMRK_MODEL_REVISION_TIME,
+    BCHMRK_MODEL_CONSISTENCY_TIME, BCHMRK_MODEL_REPAIR_TIME,
+    BCHMRK_COMPOUND_NAME, BCHMRK_COMPOUND_STATE,
+    BCHMARK_ORIGINAL_REGULATOR_NO,
+    BCHMARK_ORIGINAL_NODE_NO,
+    BCHMARK_COMPOUND_REPAIR_TIME,
+    *min_change_criteria
+    )]
 
-for model in models:
-  final_state = "consistent"
-  total_revision_time = 0
-  total_consistency_time = 0
-  total_repair_time = 0
+  for model in models:
+    final_state = "consistent"
+    total_revision_time = 0
+    total_consistency_time = 0
+    total_repair_time = 0
 
-  revision_start_time = time.monotonic()
-  model_revision_stats = initRevisionStatsMap(model[0])
+    revision_start_time = time.monotonic()
+    model_revision_stats = initRevisionStatsMap(model[0])
 
-  if bulk_enabled and not benchmark_enabled: print("Currently revising model ", model[1])
-  global_logger.info(f"Currently revising model {model[1]}")
-
-  consistency_start_time = time.monotonic()
-  inconsistencies = checkConsistency(model[0], obsv_path)
-  consistency_end_time = time.monotonic()
-
-  total_consistency_time = consistency_end_time - consistency_start_time
-
-  # Second, check the consistency of the .lp model using the provided observations
-  # and time step. If the model is consistent, print a message saying so.
-  if inconsistencies:
-    if not benchmark_enabled: print("Inconsistent model! \nRepairing...")
+    if bulk_enabled and not benchmark_enabled: print("Currently revising model ", model[1])
     global_logger.info(f"Currently revising model {model[1]}")
 
-    # Third, if it is not, proceed with the repairs and print out the necessary ones.
-    repair_start_time = time.monotonic()
-    final_state = repair(model[0], inconsistencies, model_revision_stats)
-    repair_end_time = time.monotonic()
+    consistency_start_time = time.monotonic()
+    inconsistencies = checkConsistency(model[0], obsv_path)
+    consistency_end_time = time.monotonic()
 
-    total_repair_time = repair_end_time - repair_start_time
-    
-    if not benchmark_enabled and final_state == "repaired": print(f"Applying the above repairs to model {model[1]} will render it consistent!\n")
+    total_consistency_time = consistency_end_time - consistency_start_time
 
-  revision_end_time = time.monotonic()
-  total_revision_time = revision_end_time - revision_start_time
+    # Second, check the consistency of the .lp model using the provided observations
+    # and time step. If the model is consistent, print a message saying so.
+    if inconsistencies:
+      if not benchmark_enabled: print("Inconsistent model! \nRepairing...")
+      global_logger.info(f"Currently revising model {model[1]}")
+
+      # Third, if it is not, proceed with the repairs and print out the necessary ones.
+      repair_start_time = time.monotonic()
+      final_state = repair(model[0], inconsistencies, model_revision_stats)
+      repair_end_time = time.monotonic()
+
+      total_repair_time = repair_end_time - repair_start_time
+      
+      if not benchmark_enabled and final_state == "repaired": print(f"Applying the above repairs to model {model[1]} will render it consistent!\n")
+
+    revision_end_time = time.monotonic()
+    total_revision_time = revision_end_time - revision_start_time
+
+    if benchmark_enabled:
+      fillBenchmarkArray(benchmark_array, model[1], final_state,
+        total_revision_time, 
+        total_consistency_time,
+        total_repair_time, model_revision_stats)
 
   if benchmark_enabled:
-    fillBenchmarkArray(benchmark_array, model[1], final_state,
-      total_revision_time, 
-      total_consistency_time,
-      total_repair_time, model_revision_stats)
+    saveBenchmark(benchmark_array)
+  else:
+    global_logger.info("Benchmarking disabled, not saving.")
 
-if benchmark_enabled:
-  saveBenchmark(benchmark_array)
-else:
-  global_logger.info("Benchmarking disabled, not saving.")
+if __name__ == "__main__":
+  try:
+    main()
+  except Exception as e:
+    global_logger.exception(f"An unexpected exception occurred during the revision process: {e}")
+    raise e
 
 

@@ -36,8 +36,12 @@ def logRepairedLP(inconsistent_func, result, criteria_costs, to_stdout=True, log
 
   else:
     for atom in result:
-      
-      arguments = atom.split(')')[0].split('(')[1].split(',')
+      if len(atom) == 0:
+        continue
+      try: arguments = atom.split(')')[0].split('(')[1].split(',')
+      except Exception as e:
+        if logger: logger.error(f"Error parsing atom {atom}:", exc_info=e)
+        continue
 
       if "regulator_activator" in atom:
         activators += f"regulates({arguments[0]}, {inconsistent_func}, 0).\n"
