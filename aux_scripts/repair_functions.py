@@ -204,7 +204,7 @@ def generateFunctionsClingo(node_number, timeout_start, func, model,
     ctl.load(repair_encoding_async_path)
   
   asp_min_criteria = build_asp_change_criteria(min_change_criteria, toggle_stable_state, toggle_sync, toggle_async)
-  if logger: logger.debug(f"Change minimization criteria: {asp_min_criteria}")
+  if logger: logger.debug(f"Change minimization criteria:\n{asp_min_criteria}")
   ctl.add("base", [], program=asp_min_criteria)
 
   ctl.ground([("base", [])])
@@ -236,7 +236,8 @@ def generateFunctionsClingo(node_number, timeout_start, func, model,
 def determineStartNodesAndLimit(func,model,upo,path_mode):
   node_limit = None
 
-  if not upo: node_limit = float('inf')
+  if not upo and upo != 0:
+    node_limit = float('inf')
   else: node_limit = upo[1]
 
   if path_mode:
@@ -333,6 +334,7 @@ def generatePreviousObservations(func, inconsistencies, toggle_sync, toggle_asyn
   if logger: printStatistics(ctl.statistics, print_func=logger.debug)
 
   if not functions[0]: #If there are no previous observations
+    if logger: logger.warning("No previous observations found.")
     return []
 
   return functions
