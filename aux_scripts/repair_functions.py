@@ -236,8 +236,8 @@ def generateFunctionsClingo(node_number, timeout_start, func, model,
 def determineStartNodesAndLimit(func,model,upo,path_mode):
   node_limit = None
 
-  if not upo and upo != 0:
-    node_limit = float('inf')
+  if not upo:
+    node_limit = 0
   else: node_limit = upo[1]
 
   if path_mode:
