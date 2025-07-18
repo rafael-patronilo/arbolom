@@ -18,24 +18,16 @@ def printIFTVEnd():
 
 #Inputs: The inconsistent function, and the resulting answer set obtained from clingo
 #Purpose: Prints the repairs in LP format
-def logRepairedLP(inconsistent_func, result, criteria_costs, to_stdout=True, logger = None):
+def logRepairedLP(inconsistent_func, repairs, criteria_costs, to_stdout=True, logger = None):
   activators = ""
   inhibitors = ""
 
   node_max_ID = 1
   node_ID_map = {} 
   nodes = {}
-
-  if result =="timed_out":
-    if logger: logger.error("Timed out before determining consistent solutions...")
-    if to_stdout: print("Timed out before determining consistent solutions...")
-
-  elif result == "no_solution":
-    if logger: logger.error("Timed out before determining consistent solutions...")
-    if to_stdout: print("No possible repairs exist...")
-
-  else:
-    for atom in result:
+  
+  if repairs:
+    for atom in repairs:
       if len(atom) == 0:
         continue
       try: arguments = atom.split(')')[0].split('(')[1].split(',')
@@ -63,22 +55,22 @@ def logRepairedLP(inconsistent_func, result, criteria_costs, to_stdout=True, log
         else:
           nodes[node_ID] = [regulator]
 
-    result = f"%Regulators of {inconsistent_func}\n" + activators + inhibitors +"\n"
-    result += f"%Regulatory function of {inconsistent_func}\nfunction({inconsistent_func}, {len(nodes.keys())}).\n"
+    repairs = f"%Regulators of {inconsistent_func}\n" + activators + inhibitors +"\n"
+    repairs += f"%Regulatory function of {inconsistent_func}\nfunction({inconsistent_func}, {len(nodes.keys())}).\n"
 
     for node_ID in nodes.keys():
       regulators = nodes[node_ID]
 
       for reg in regulators:
-        result += f"term({inconsistent_func}, {node_ID}, {reg}).\n"
+        repairs += f"term({inconsistent_func}, {node_ID}, {reg}).\n"
     
     if to_stdout: 
       print("\033[1;32mRepairs: \033[0;37;40m")
-      print(result)
+      print(repairs)
 
     logChanges(criteria_costs, to_stdout=to_stdout, logger=logger)
 
-    if logger: logger.info(f"Repairs for function {inconsistent_func}:\n{result}")
+    if logger: logger.info(f"Repairs for function {inconsistent_func}:\n{repairs}")
 
 def logChanges(criteria_costs, to_stdout=True, logger = None):
   if to_stdout:

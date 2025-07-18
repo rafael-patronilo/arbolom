@@ -55,6 +55,7 @@ benchmakr_write_folder = "None"
 toggle_stable_state = True
 toggle_sync = False
 toggle_async = False
+parallel_mode = None
 
 min_change_criteria = ["term-number", "regulators", "signs", "term-format"]
 
@@ -90,6 +91,10 @@ def parseArgs():
   parser.add_argument("-bulk", "--bulk", action='store_true', help="Enables the revision of multiple models at once. (Note: the path provided to -f must be the directory containing those models).")
   parser.add_argument("-benchmark", "--benchmark_save_folder", help="Enables benchmark mode, saving benchmark results at the specified path.")
   parser.add_argument("-benchmark_naming", "--benchmark_naming", action='store_true', help="Enables benchmark files to be saved with a more helpful name.")
+  parser.add_argument("-t", "--timeout", type=int, default=3600, help="How many seconds to wait for each function repair.")
+  parser.add_argument("-p", "--parallel_mode", type=str, default=None,
+                      help="What to pass to clingo's --parallel-mode argument. " \
+                      "The value 'auto' will choose the number of threads based on the number of available CPU cores.")
   parser.add_argument("-criteria", "--criteria", default="term-number,regulators,signs,term-format",
                       help="Comma separated list of the criteria to use to minimize changes, in order of priority. For the list of available criteria use --help-criteria. Default is %(default)s.")
   parser.add_argument("-help-criteria", "--help-criteria", action='store_true', help="Prints the available criteria to the console and exits.")
@@ -102,7 +107,7 @@ def parseArgs():
     exit(0)
   global model_path, obsv_path, benchmakr_write_folder
   global toggle_stable_state, toggle_sync, toggle_async
-  global bulk_enabled, benchmark_enabled, benchmark_naming
+  global bulk_enabled, benchmark_enabled, benchmark_naming, parallel_mode
   global min_change_criteria
 
   model_path = args.model_to_repair
@@ -123,6 +128,12 @@ def parseArgs():
       assert x in CRITERIA, f"Invalid criterion specified: {x}. Use --help-criteria to see available criteria."
     min_change_criteria = custom_criteria
 
+  if args.parallel_mode:
+    if args.parallel_mode == "auto":
+      parallel_mode = f"{min(64, os.cpu_count())}"  # Automatically set to the number of CPU cores
+    else:
+      parallel_mode = args.parallel_mode
+    logger.info(f"Parallel argument set to: --parallel-mode {parallel_mode}")
   if bulk:
     bulk_enabled = bulk  
   
@@ -352,6 +363,7 @@ def repair(model, inconsistencies, revision_stats):
   final_state = "repaired"
 
   timed_out_functions = []
+  suboptimal_repairs = []
   unrepairable_functions = []
 
   if i_f_array:
@@ -365,20 +377,25 @@ def repair(model, inconsistencies, revision_stats):
       upo = processPreviousObservations(prev_obs, logger = func_logger)
       
       compound_repair_start = time.monotonic()
-      functions, costs = generateFunctions(func, model, inconsistencies, upo, min_change_criteria,
-        toggle_stable_state, toggle_sync, toggle_async, logger = func_logger)
+      result, functions, costs = generateFunctions(func, model, inconsistencies, upo, min_change_criteria, args.timeout,
+        toggle_stable_state, toggle_sync, toggle_async, parallel_mode=parallel_mode, logger = func_logger)
       compound_repair_end = time.monotonic()
       
 
-      if functions == "timed_out": 
-        timed_out_functions.append(func)
-        func_state = "inconsistent (timed out)"
-      elif functions == "no_solution": 
+      if result == "timeout": 
+        if functions:
+          func_state = "suboptimally repaired (timed out)"
+          suboptimal_repairs.append(func)
+        else:
+          func_state = "inconsistent (timed out)"
+          timed_out_functions.append(func)
+      elif result == "no_solution": 
         unrepairable_functions.append(func)
         func_state = "inconsistent (no solution)"
-      else:
+      if functions:
         assert costs is not None
       func_logger.info(f"Completed repairing of {func}, final state: {func_state}")
+      if not benchmark_enabled: print(f"Completed repairing of {func}, final state: {func_state}")
 
       if costs is None:
         costs = [float('nan')] * len(min_change_criteria)
@@ -395,6 +412,8 @@ def repair(model, inconsistencies, revision_stats):
     final_state = "still inconsistent (timed out functions)"
   elif unrepairable_functions:
     final_state = "still inconsistent (functions without existing solutions)"
+  elif suboptimal_repairs:
+    final_state = "suboptimally repaired (functions timed out before finding optimal repair)"
 
   return final_state
 
@@ -447,7 +466,7 @@ def main():
 
       total_repair_time = repair_end_time - repair_start_time
       
-      if not benchmark_enabled and final_state == "repaired": print(f"Applying the above repairs to model {model[1]} will render it consistent!\n")
+      if not benchmark_enabled and "repaired" in final_state: print(f"Applying the above repairs to model {model[1]} will render it consistent!\n")
 
     revision_end_time = time.monotonic()
     total_revision_time = revision_end_time - revision_start_time

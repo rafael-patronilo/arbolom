@@ -5,7 +5,7 @@ from aux_scripts.consistency_functions import *
 from aux_scripts.conversion_functions import *
 from aux_scripts.repair_functions import *
 from aux_scripts.repair_prints import *
-from aux_scripts.repair_criteria import print_criteria
+import sys
 
 #Usage: $python benchmark.py -f (CONFIG_FOLDER) -o (OBSERVATION_FOLDER) -m (MODEL_NAME) -s (SAVE_FOLDER) -stable -sync -async
 #Optional flags:
@@ -62,9 +62,9 @@ def parseArgs():
   logger = logging.getLogger("parser")
   logger.setLevel(logging.INFO)
 
-  global parser, args
+  global parser, args, common_revision_args
 
-  parser = argparse.ArgumentParser(description="Benchmark the ARBoLoM tool using the benchmarking folder structure presented in the project's page.")
+  parser = argparse.ArgumentParser(description="Benchmark the ARBoLoM tool using the benchmarking folder structure presented in the project's page. Extra arguments will be passedthrough to revision.py")
   requiredNamed = parser.add_argument_group("required arguments")
   requiredNamed.add_argument("-f", "--config_folder", help="Path of folder containing config folders.", required=True)
   requiredNamed.add_argument("-o", "--observations", help="Path of observations from real-world models.", required=True)
@@ -74,15 +74,9 @@ def parseArgs():
   parser.add_argument("-stable", "--stable_state", action='store_true', help="Flag to benchmark using stable state observations (default).")
   parser.add_argument("-sync", "--synchronous", action='store_true', help="Flag to benchmark using synchronous observations (default is stable state).")
   parser.add_argument("-async", "--asynchronous", action='store_true', help="Flag to benchmark using asynchronous observations (default is stable state).")
-  parser.add_argument("-criteria", "--criteria", default="term-number,regulators,signs,term-format",
-                      help="Comma separated list of the criteria to use to minimize changes, in order of priority. For the list of available criteria use --help-criteria. Default is %(default)s.")
-  parser.add_argument("-help-criteria", "--help-criteria", action='store_true', help="Prints the available criteria to the console and exits.")
-  args = parser.parse_args()
+  args, common_revision_args = parser.parse_known_args(sys.argv[1:])
 
-  if args.help_criteria:
-    print_criteria()
-    exit(0)
-  global config_path, obsv_path, model_name, save_folder, skip_n_first, common_revision_args
+  global config_path, obsv_path, model_name, save_folder, skip_n_first
   global toggle_stable_state, toggle_sync, toggle_async
 
   config_path = args.config_folder
@@ -119,10 +113,6 @@ def parseArgs():
     toggle_sync = False
     toggle_async = True
     logger.info("Mode used: Asynchronous \U0001f331")
-
-  if args.criteria:
-    common_revision_args.append('-criteria')
-    common_revision_args.append(args.criteria)
 
   skip_n_first = args.skip_n_first
 

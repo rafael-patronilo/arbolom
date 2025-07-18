@@ -17,7 +17,7 @@ repair_encoding_sync_path = "encodings/repairs/repairs_sync.lp"
 repair_encoding_async_path = "encodings/repairs/repairs_async.lp"
 
 #Timeout for function repair
-repair_timeout = 3600
+# repair_timeout = 3600
 
 
 #-----Functions that solve LPs with clingo-----
@@ -66,9 +66,9 @@ def generateInconsistentFunctions(model, inconsistencies, debug_mode=False, path
 # path_mode - flag that enables loading the model and inconsistencies from a file, instead of a string
 # enable_prints - enables additional prints
 #Purpose: Generates a function that is compatible with previously given observations, based on the obtained inconsistencies
-def generateFunctions(func, model, incst, upo, min_change_criteria,
+def generateFunctions(func, model, incst, upo, min_change_criteria, repair_timeout,
                       toggle_stable_state, toggle_sync, toggle_async, 
-                      path_mode = False, logger=None):
+                      parallel_mode=None, path_mode = False, logger=None):
   if logger: logger.debug("Calculating repairs...")
 
   #current_variation = 0
@@ -82,18 +82,20 @@ def generateFunctions(func, model, incst, upo, min_change_criteria,
     logger.debug(f"Trying to find a solution with at most ({max_node_limit}) nodes...")
     if math.isinf(max_node_limit): logger.error("Node limit is infinite")
   timeout_start = time.time()
-  function, costs = generateFunctionsClingo(max_node_limit, timeout_start, func, model, incst, upo_program, min_change_criteria,
-                                     toggle_stable_state, toggle_sync, toggle_async, path_mode, logger)
-  if function == "timed_out": 
-    if logger: logger.debug(f"No solutions.")
-    return function, None
+  no_timeout, function, costs = generateFunctionsClingo(max_node_limit, timeout_start, repair_timeout, func, model, incst, upo_program, min_change_criteria,
+                                     toggle_stable_state, toggle_sync, toggle_async, parallel_mode, path_mode, logger)
+  if not no_timeout: 
+    if logger: logger.warning(f"Search timed out. If a solution was found, it will be suboptimal.")
+    result = "timeout"
   elif function:
-    if logger: logger.debug("... Done.")
-    assert costs is not None
-    return function, costs
+    if logger: logger.info("... Done.")
+    result = "repaired"
   else:
-    if logger: logger.debug(f"No solutions.")
-    return "no_solution", None
+    if logger: logger.error(f"No solutions.")
+    result = "no_solution"
+  if function:
+    assert costs is not None
+  return result, function, costs
 
 #Inputs:
 # function_above - the function with original number of nodes + variation
@@ -178,12 +180,17 @@ def getFuncStatMap(function):
 # path_mode - flag that enables loading the model and inconsistencies from a file, instead of a string
 # enable_prints - enables additional prints
 #Purpose: Calls clingo to solve the repair encoding
-def generateFunctionsClingo(node_number, timeout_start, func, model,
+def generateFunctionsClingo(node_number, timeout_start, 
+                             repair_timeout, func, model,
                              incst, upo_program, min_change_criteria,
                              toggle_stable_state, toggle_sync, toggle_async, 
+                             parallel_mode=None,
                              path_mode = False, logger=None):
   no_timeout = True
   clingo_args = ["0", f"-c compound={func}", f"-c max_node_number={node_number}"]
+  if parallel_mode:
+    clingo_args.append(f"--parallel-mode")
+    clingo_args.append(parallel_mode)
       
   ctl = clingo.Control(arguments=clingo_args, logger= lambda a,b: None)
 
@@ -217,14 +224,13 @@ def generateFunctionsClingo(node_number, timeout_start, func, model,
     costs = m.cost
 
   with ctl.solve(on_model=on_model, async_=True) as handle:
-    no_timeout = handle.wait(repair_timeout - (time.time() - timeout_start))
+    if logger: logger.debug(f"Waiting at most {repair_timeout} seconds for optimal solution")
+    no_timeout = handle.wait(repair_timeout) # - (time.time() - timeout_start))
+    if logger and not no_timeout: logger.debug("Timeout; Cancelling...")
     handle.cancel()
-
-  if not no_timeout:
-    function = "timed_out" 
   
   if logger: logger.debug(ctl.statistics)
-  return function, costs
+  return no_timeout, function, costs
 
 #Inputs:
 # func - the inconsistent function
