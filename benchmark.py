@@ -1,5 +1,6 @@
 from genericpath import isdir
 import os, argparse, logging, time
+from pathlib import Path
 import subprocess
 from aux_scripts.consistency_functions import *
 from aux_scripts.conversion_functions import *
@@ -159,48 +160,59 @@ def getConfigsList():
   
   return configs_path_list
 
-#-----Main-----
-parseArgs()
+try:
+  #-----Main-----
+  parseArgs()
 
-revision_base_args = f"-bulk -benchmark_naming -benchmark {save_folder}"
+  revision_base_args = f"-bulk -benchmark_naming -benchmark {save_folder}"
 
-interaction_mode = None
-if toggle_stable_state: interaction_mode = "stable"
-elif toggle_sync: interaction_mode = "sync"
-elif toggle_async: interaction_mode = "async"
+  interaction_mode = None
+  if toggle_stable_state: interaction_mode = "stable"
+  elif toggle_sync: interaction_mode = "sync"
+  elif toggle_async: interaction_mode = "async"
 
-configs_list = getConfigsList()
-obsv_list = getObsvList()
+  configs_list = getConfigsList()
+  obsv_list = getObsvList()
 
-global_logger.debug(f"Obtained config models: {configs_list}")
-global_logger.debug(f"Obtained observations: {obsv_list}")
+  global_logger.debug(f"Obtained config models: {configs_list}")
+  global_logger.debug(f"Obtained observations: {obsv_list}")
 
-current_observations = None
-current_config_directory = None
-current_obs_number = 0
-current_config_number = 0
-
-for obsv in obsv_list:
-  current_observations = obsv
-  revision_obsv_args = f"-o {current_observations}"
-  current_obs_number += 1
-
-  for config in configs_list:
-    current_config_number += 1
-    current_config_directory = config
-    revision_model_args = f"-f {current_config_directory}"
-    
-    if skip_n_first > 0:
-      skip_n_first -= 1
-      global_logger.info(f"Skipping: Obsv({current_obs_number}/{len(obsv_list)}) || Config({current_config_number}/{len(configs_list)})")
-      continue
-    subprocess.run(['python', 'revision.py', 
-    '-f', current_config_directory,
-    '-o', current_observations,
-    f'-{interaction_mode}',
-    '-bulk', '-benchmark_naming','-benchmark', save_folder] + common_revision_args)
-    global_logger.info(f"Current progress: Obsv({current_obs_number}/{len(obsv_list)}) || Config({current_config_number}/{len(configs_list)})")
+  current_observations = None
+  current_config_directory = None
+  current_obs_number = 0
   current_config_number = 0
-  
-global_logger.info("Done!")
-  
+
+  for obsv in obsv_list:
+    current_observations = obsv
+    revision_obsv_args = f"-o {current_observations}"
+    current_obs_number += 1
+
+    for config in configs_list:
+      current_config_number += 1
+      current_config_directory = config
+      revision_model_args = f"-f {current_config_directory}"
+      
+      if skip_n_first > 0:
+        skip_n_first -= 1
+        global_logger.info(f"Skipping: Obsv({current_obs_number}/{len(obsv_list)}) || Config({current_config_number}/{len(configs_list)})")
+        continue
+      result = subprocess.run(['python', 'revision.py',
+      '-f', current_config_directory,
+      '-o', current_observations,
+      f'-{interaction_mode}',
+      '-bulk', '-benchmark_naming','-benchmark', save_folder] + common_revision_args,
+      capture_output=True
+      )
+      if result.returncode != 0:
+        global_logger.error(f"Revision process returned {result.returncode}"
+                            f"\n\nSTDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}")
+      elif result.stderr:
+        global_logger.error(f"Revision process had an error"
+                            f"\n\nSTDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}")
+      global_logger.info(f"Current progress: Obsv({current_obs_number}/{len(obsv_list)}) || Config({current_config_number}/{len(configs_list)})")
+    current_config_number = 0
+    
+  global_logger.info("Done!")
+except Exception as e:
+  print(e)
+  raise e
