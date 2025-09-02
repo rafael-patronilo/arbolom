@@ -63,12 +63,20 @@ def generateInconsistentFunctions(model, inconsistencies, debug_mode=False, path
 # path_mode - flag that enables loading the model and inconsistencies from a file, instead of a string
 # enable_prints - enables additional prints
 #Purpose: Generates a function that is compatible with previously given observations, based on the obtained inconsistencies
-def generateFunctions(func, model, incst, upo, toggle_stable_state, toggle_sync, toggle_async, min_change_criteria, path_mode = False, enable_prints=False):
-  if enable_prints: print("Calculating repairs...")
+def generateFunctions(func, model, incst, upo, toggle_stable_state, toggle_sync, toggle_async, min_change_criteria, path_mode = False, logger=None):
+  if logger:
+    logger.warning("Some changes are still being ported to this version. "
+      "Parallel mode is not available.")
+    logger.debug("Calculating repairs...")
+  
+  def make_return_tuple(result, function, variation):
+    costs = function[1] if function[1] is None else [variation] + function[1]
+    return result, function[0], costs
 
   current_variation = 0
   final_variation = 0
-  function = []
+  function = ([], None)
+  timed_out = False
   upo_program = ""
   if upo : upo_program = upo[0]
   starting_node_number, max_node_limit = determineStartNodesAndLimit(func,model,upo,path_mode)
@@ -76,39 +84,46 @@ def generateFunctions(func, model, incst, upo, toggle_stable_state, toggle_sync,
   timeout_start = time.time()
   while True:
     if current_variation == 0:
-      if enable_prints: print(f"Trying to find a solution with the same ({starting_node_number}) number of nodes...")
+      if logger: logger.info(f"Trying to find a solution with the same ({starting_node_number}) number of nodes...")
       node_number = starting_node_number
-      function = generateFunctionsClingo(node_number, timeout_start, func, model, incst, upo_program, toggle_stable_state, toggle_sync, toggle_async, min_change_criteria, path_mode, enable_prints)
-      if function == "timed_out": return function, 0
+      timed_out, function = generateFunctionsClingo(node_number, timeout_start, func, model, incst,
+                                         upo_program, toggle_stable_state, toggle_sync, 
+                                         toggle_async, min_change_criteria, path_mode, logger)
+      if timed_out: return make_return_tuple('timeout', function, 0)
           
     else:
       high_node_number = starting_node_number + current_variation
       function_above = None
       if high_node_number <= max_node_limit:
-        if enable_prints: print(f"Trying to find a solution with {starting_node_number + current_variation} nodes...(max is {max_node_limit})")
-        function_above = generateFunctionsClingo(high_node_number, timeout_start, func, model, incst, upo_program, toggle_stable_state, toggle_sync, toggle_async, min_change_criteria, path_mode, enable_prints)
-        if function_above == "timed_out": return function_above, 0
+        if logger: logger.info(f"Trying to find a solution with {starting_node_number + current_variation} nodes...(max is {max_node_limit})")
+        timed_out, function_above = generateFunctionsClingo(high_node_number, timeout_start, func, model, incst, 
+                                                 upo_program, toggle_stable_state, toggle_sync, 
+                                                 toggle_async, min_change_criteria, path_mode, logger)
+        if timed_out: return make_return_tuple('timeout', function_above, current_variation)
       
       low_node_number = starting_node_number - current_variation
       function_below = None
       if low_node_number > 0:
-        if enable_prints: print(f"Trying to find a solution with {starting_node_number - current_variation} nodes...(minimum is 1)")
-        function_below = generateFunctionsClingo(low_node_number, timeout_start, func, model, incst, upo_program, toggle_stable_state, toggle_sync, toggle_async, min_change_criteria, path_mode, enable_prints)
-        if function_below == "timed_out": return function_below, 0
+        if logger: logger.info(f"Trying to find a solution with {starting_node_number - current_variation} nodes...(minimum is 1)")
+        timed_out, function_below = generateFunctionsClingo(low_node_number, timeout_start, func, model, incst, 
+                                                 upo_program, toggle_stable_state, toggle_sync, 
+                                                 toggle_async, min_change_criteria, path_mode, logger)
 
       function, final_variation = compareAndGetBestFunction(function_above, function_below, current_variation)
 
-    if function:
-      if enable_prints: print("... Done.")
-      return function, final_variation
-
+    if timed_out:
+      if logger: logger.error("Timed out; if there is a function it will be suboptimal")
+      return make_return_tuple('timeout', function, final_variation)
+    elif function:
+      if logger: logger.info("... Done.")
+      return make_return_tuple("repaired", function, final_variation)
     else:
-      if enable_prints: print(f"No solutions with {starting_node_number + current_variation} nodes.")
+      if logger: logger.info(f"No solutions with {starting_node_number + current_variation} nodes.")
       current_variation += 1
       if starting_node_number + current_variation > max_node_limit and \
         starting_node_number - current_variation <= 0:
-        if enable_prints: print("... Done.")
-        return "no_solution", 0
+        if logger: logger.info("... Done. No solution")
+        return "no_solution", [], None
 
 #Inputs:
 # function_above - the function with original number of nodes + variation
@@ -120,7 +135,7 @@ def compareAndGetBestFunction(function_above, function_below, variation):
   if function_above and not function_below: return function_above, variation
   if function_below and not function_above: return function_below, -variation
 
-  if tuple(function_above[1]) < tuple(function_below):
+  if tuple(function_above[1]) < tuple(function_below[1]):
     return function_above, variation
   else:
     return function_below, -variation
@@ -138,7 +153,7 @@ def compareAndGetBestFunction(function_above, function_below, variation):
 # path_mode - flag that enables loading the model and inconsistencies from a file, instead of a string
 # enable_prints - enables additional prints
 #Purpose: Calls clingo to solve the repair encoding
-def generateFunctionsClingo(node_number, timeout_start, func, model, incst, upo_program, toggle_stable_state, toggle_sync, toggle_async, min_change_criteria, path_mode = False, enable_prints=False):
+def generateFunctionsClingo(node_number, timeout_start, func, model, incst, upo_program, toggle_stable_state, toggle_sync, toggle_async, min_change_criteria, path_mode = False, logger=None):
   no_timeout = True
   clingo_args = ["0", f"-c compound={func}", f"-c node_number={node_number}"]
       
@@ -176,11 +191,9 @@ def generateFunctionsClingo(node_number, timeout_start, func, model, incst, upo_
     no_timeout = handle.wait(repair_timeout - (time.time() - timeout_start))
     handle.cancel()
   
-  if enable_prints: printStatistics(ctl.statistics)
-  if not no_timeout:
-    return "timed_out"
+  if logger: printStatistics(ctl.statistics, logger.debug)
   
-  return function, costs
+  return not no_timeout, (function, costs)
 
 #Inputs:
 # func - the inconsistent function
@@ -192,7 +205,7 @@ def generateFunctionsClingo(node_number, timeout_start, func, model, incst, upo_
 def determineStartNodesAndLimit(func,model,upo,path_mode):
   node_limit = None
 
-  if not upo: node_limit = float('inf')
+  if not upo: node_limit = 0
   else: node_limit = upo[1]
 
   if path_mode:

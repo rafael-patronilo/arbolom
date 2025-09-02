@@ -2,7 +2,7 @@ import math
 import time, clingo
 from aux_scripts.repair_criteria import build_asp_change_criteria
 from aux_scripts.repair_prints import printStatistics
-import deepening_search
+from aux_scripts import deepening_search
 
 #Path of the encodings to obtain inconsistent functions
 inconsistent_functions_path = "encodings/repairs/auxiliary/inconsistent_functions.lp"
@@ -72,32 +72,22 @@ def generateFunctions(func, model, incst, upo, min_change_criteria, repair_timeo
   if logger: logger.debug("Calculating repairs...")
 
   if min_change_criteria[0] == 'term-number':
-    if logger:
-      logger.info("Switching to former version to take advantage of deepening search")
-      logger.warning("Some changes are still being ported to this version. "
-      "Logging will be limited and parallel mode is not available.")
-    deepening_result, variation = deepening_search.generateFunctions(
+    if logger: logger.info("Switching to former version to take advantage of deepening search")
+    return deepening_search.generateFunctions(
       func, model, incst, upo, toggle_stable_state, toggle_sync, toggle_async, 
-      min_change_criteria[1:], path_mode, False)
-    if deepening_result == 'timed_out':
-      return "timeout", [], None
-    else:
-      no_timeout = True
-      function = deepening_result[0]
-      costs = [variation] + deepening_result[1]
-  else:
-    function = []
-    upo_program = ""
-    if upo : upo_program = upo[0]
+      min_change_criteria[1:], path_mode, logger)
+  function = []
+  upo_program = ""
+  if upo : upo_program = upo[0]
 
-    _, max_node_limit = determineStartNodesAndLimit(func, model, upo, path_mode)
-    if logger: 
-      logger.debug(f"Trying to find a solution with at most ({max_node_limit}) nodes...")
-      if math.isinf(max_node_limit): logger.error("Node limit is infinite")
-    timeout_start = time.time()
-    no_timeout, function, costs = generateFunctionsClingo(max_node_limit, timeout_start, repair_timeout, func, model, 
-                                                          incst, upo_program, min_change_criteria,
-                                      toggle_stable_state, toggle_sync, toggle_async, parallel_mode, path_mode, logger)
+  _, max_node_limit = determineStartNodesAndLimit(func, model, upo, path_mode)
+  if logger: 
+    logger.debug(f"Trying to find a solution with at most ({max_node_limit}) nodes...")
+    if math.isinf(max_node_limit): logger.error("Node limit is infinite")
+  timeout_start = time.time()
+  no_timeout, function, costs = generateFunctionsClingo(max_node_limit, timeout_start, repair_timeout, func, model, 
+                                                        incst, upo_program, min_change_criteria,
+                                    toggle_stable_state, toggle_sync, toggle_async, parallel_mode, path_mode, logger)
   if not no_timeout: 
     if logger: logger.warning(f"Search timed out. If a solution was found, it will be suboptimal.")
     result = "timeout"
