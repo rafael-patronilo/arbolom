@@ -31,18 +31,22 @@ CRITERIA = {
 
 
     "extra-regulators" : RepairCriterion(
-        "#minimize{{1@{p}, C : not original_regulator(C), present_regulator(C)}}.",
+        "#minimize{{1@{p}, C : not regulates(C,compound,_), node_regulator(N,C)}}.",
         "Optimize for the minimum number of added regulators in the new formula."
     ),
     "missing-regulators" : RepairCriterion(
-        "#minimize{{1@{p}, C : original_regulator(C), not present_regulator(C)}}.",
+        "#minimize{{1@{p}, C : regulates(C,compound,_), not node_regulator(N,C)}}.",
         "Optimize for the minimum number of removed regulators from the old formula."
     ),
 
 
-    "signs" :  RepairCriterion(
-        "#minimize{{1@{p}, C : sign_changed(C)}}.",
-        "Optimize for the minimum number of changed regulator signs in the new formula."
+    "sign-to-inhibitor" : RepairCriterion(
+        "#minimize{{1@{p}, C : regulates(C,compound,0), inhibitor(C)}}.",
+        "Optimize for the minimum number of activators changed to inhibitors."
+    ),
+    "sign-to-activator" : RepairCriterion(
+        "#minimize{{1@{p}, C : regulates(C,compound,1), activator(C)}}.",
+        "Optimize for the minimum number of inhibitors changed to activators."
     ),
 
 
@@ -61,30 +65,35 @@ CRITERIA = {
 # 1-Optimize for the minimum changes to number of terms (highest priority by default)
 CRITERIA["term-number"] = CRITERIA["extra-terms"].combine(
     CRITERIA["missing-terms"], 
-    "Optimize for the minimum number of changes to the number of terms in the new formula."
+    "Optimize for the minimum number of changes to the number of terms in the new formula. "
     "Combines 'extra-terms' and 'missing-terms'."
 )
 # 2-Optimize for the minimum changes to regulators (second highest priority by default)
 CRITERIA["regulators"] = CRITERIA["extra-regulators"].combine(
     CRITERIA["missing-regulators"], 
-    "Optimize for the minimum number of changes to regulators in the new formula."
+    "Optimize for the minimum number of changes to regulators in the new formula. "
     "Combines 'extra-regulators' and 'missing-regulators'."
 )
 # 3-Optimize for the minimum changes to signs (third highest priority by default)
-# not combined, as it is a single criterion
+CRITERIA["signs"] = CRITERIA["sign-to-inhibitor"].combine(
+    CRITERIA["sign-to-activator"],
+    "Optimize for the minimum number of changed regulator signs in the new formula. "
+    "Combines 'sign-to-inhibitor' and 'sign-to-activator'."
+)
 # 4-Optimize for the minimum changes to term format (lowest priority by default)
 CRITERIA["term-format"] = CRITERIA["term-missing-regulator"].combine(
     CRITERIA["term-extra-regulator"], 
-    "Optimize for the minimum number of changes to the term format in the new formula."
+    "Optimize for the minimum number of changes to the term format in the new formula. "
     "Combines 'term-missing-regulator' and 'term-extra-regulator'."
 )
 
 # Combine the term-number and term-format criteria into a single criterion
 CRITERIA["terms"] = CRITERIA["term-number"].combine(
     CRITERIA["term-format"],
-    "Optimize for the minimum number of changes to the terms, both number and format, in the new formula."
+    "Optimize for the minimum number of changes to the terms, both number and format, in the new formula. "
     "Combines 'term-number' and 'term-format'."
 )
+
 
 def build_asp_change_criteria(criteria : list[str], toggle_stable_state, toggle_sync, toggle_async) -> str:
     asp_criteria = []
