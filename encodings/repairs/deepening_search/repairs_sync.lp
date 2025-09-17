@@ -57,18 +57,6 @@ timestep_negative_node(E,T,N) :- node_regulator(N,C), curated_observation(E,T,C,
 %Nodes that aren't negative (i.e. have value 0) at time step T of experiment E must be positive (i.e. have value 1)
 timestep_positive_node(E,T,N) :- not timestep_negative_node(E,T,N), node_ID(N), curated_observation(E,T,_,_).
 
-%*--Identifying missing/extra regulators (minimization #1)--*%
-%An original_regulator C is a regulator that is present in the original inconsistent function
-original_regulator(C) :- regulates(C,compound,_).
-
-%If a regulator C is present in node N, then we define it as a present_regulator
-present_regulator(C) :- node_regulator(N,C).
-
-%*--Identifying sign changes (minimization #2)--*%
-%(used in minimization #2)
-sign_changed(C) :- regulates(C,compound,0), inhibitor(C).
-sign_changed(C) :- regulates(C,compound,1), activator(C).
-
 %Test
 %1-We're only interested in generating nodes that can be used to explain the observations,
 %which is not possible for a node to do if it is positive when we expect it to be negative

@@ -31,11 +31,11 @@ CRITERIA = {
 
 
     "extra-regulators" : RepairCriterion(
-        "#minimize{{1@{p}, C : not regulates(C,compound,_), node_regulator(N,C)}}.",
+        "#minimize{{1@{p}, C : not regulates(C,compound,_), node_regulator(_,C)}}.",
         "Optimize for the minimum number of added regulators in the new formula."
     ),
     "missing-regulators" : RepairCriterion(
-        "#minimize{{1@{p}, C : regulates(C,compound,_), not node_regulator(N,C)}}.",
+        "#minimize{{1@{p}, C : regulates(C,compound,_), not node_regulator(_,C)}}.",
         "Optimize for the minimum number of removed regulators from the old formula."
     ),
 
