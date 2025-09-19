@@ -287,7 +287,7 @@ def processFunctionRepairStats(func, func_state, criteria_costs, repairs, repair
 #Input: array - the array containing the lines with benchmark results
 #  to write on the output file
 #Purpose: Saves the results from benchmarking in the specified save_path
-def saveBenchmark(array):
+def saveBenchmark(array, snapshot=False):
   logger = logging.getLogger("saveBenchmark")
 
   filename = None
@@ -298,11 +298,17 @@ def saveBenchmark(array):
 
 
   if toggle_stable_state:
-    filename += "-stable_benchmark.csv"
+    filename += "-stable_benchmark"
   elif toggle_sync:
-    filename += "-sync_benchmark.csv"
+    filename += "-sync_benchmark"
   else:
-    filename += "-async_benchmark.csv"
+    filename += "-async_benchmark"
+
+  snapshot_filename = filename + '-snapshot.csv'
+  if snapshot:
+    filename = snapshot_filename
+  else:
+    filename += '.csv'
   
   save_path = None
   if benchmakr_write_folder:
@@ -325,7 +331,8 @@ def saveBenchmark(array):
        
     f.write("\n")
   f.close()
-
+  if not snapshot and os.path.exists(snapshot_filename):
+    os.remove(snapshot_filename)
   logger.info("Saved benchmark to: " + str(save_path))
 
 
@@ -476,6 +483,7 @@ def main():
         total_revision_time, 
         total_consistency_time,
         total_repair_time, model_revision_stats)
+      saveBenchmark(benchmark_array, snapshot=True)
 
   if benchmark_enabled:
     saveBenchmark(benchmark_array)
