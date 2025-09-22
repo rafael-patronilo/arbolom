@@ -130,7 +130,7 @@ def parseArgs():
 
   if args.parallel_mode:
     if args.parallel_mode == "auto":
-      parallel_mode = f"{min(64, os.cpu_count())}"  # Automatically set to the number of CPU cores
+      parallel_mode = f"{min(64, os.cpu_count() or 1)}"  # Automatically set to the number of CPU cores
     else:
       parallel_mode = args.parallel_mode
     logger.info(f"Parallel argument set to: --parallel-mode {parallel_mode}")
