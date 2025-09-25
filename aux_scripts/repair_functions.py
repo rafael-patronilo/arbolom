@@ -295,7 +295,7 @@ def processPreviousObservations(prev_obs, logger=None):
 
   current_experiment = ""
   current_timestep = ""
-  current_state_key = "0"
+  current_state_key = []
 
   start = time.time()
   for previous_obsv in prev_obs:
@@ -316,25 +316,25 @@ def processPreviousObservations(prev_obs, logger=None):
       #If the compound is active, it will be a part of this timestep's 
       # state key
       if state == "1":
-        current_state_key += compound
+        current_state_key.append(compound)
 
     else: #We are looking at a different experiment or timestep
 
       #Save previous timestep's state in the map, if it didn't exist yet
-      sorted_state = "".join(sorted(current_state_key))
+      sorted_state = frozenset(current_state_key)
 
       if sorted_state not in uniques_map:
           uniques_map[sorted_state] = current_experiment + ","+ str(int(current_timestep) + 1)
    
       current_experiment = experiment
       current_timestep = timestep
-      current_state_key = "0"
+      current_state_key = []
 
       if state == "1":
-        current_state_key += compound
+        current_state_key.append(compound)
 
   #End of loop, last timestep's state must be saved
-  sorted_state = "".join(sorted(current_state_key))
+  sorted_state = frozenset(current_state_key)
 
   if sorted_state not in uniques_map:
     uniques_map[sorted_state] = current_experiment + ","+ str(int(current_timestep) + 1)
