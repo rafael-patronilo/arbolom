@@ -1,11 +1,12 @@
-from genericpath import isdir
-import os, argparse, logging, time
-from pathlib import Path
+import os, argparse, logging
 import subprocess
+from aux_scripts.repair_constants import *
 from aux_scripts.consistency_functions import *
 from aux_scripts.conversion_functions import *
 from aux_scripts.repair_functions import *
 from aux_scripts.repair_prints import *
+from aux_scripts.repair_criteria import CRITERIA, print_criteria
+import shutil
 import sys
 
 #Usage: $python benchmark.py -f (CONFIG_FOLDER) -o (OBSERVATION_FOLDER) -m (MODEL_NAME) -s (SAVE_FOLDER) -stable -sync -async
@@ -48,6 +49,7 @@ toggle_async = False
 parser = None
 args = None
 
+min_change_criteria = ["term-number", "regulators", "signs", "term-format"]
 
 common_revision_args = []
 
@@ -75,10 +77,17 @@ def parseArgs():
   parser.add_argument("-stable", "--stable_state", action='store_true', help="Flag to benchmark using stable state observations (default).")
   parser.add_argument("-sync", "--synchronous", action='store_true', help="Flag to benchmark using synchronous observations (default is stable state).")
   parser.add_argument("-async", "--asynchronous", action='store_true', help="Flag to benchmark using asynchronous observations (default is stable state).")
+  parser.add_argument("-criteria", "--criteria", default="term-number,regulators,signs,term-format",
+      help="Comma separated list of the criteria to use to minimize changes, in order of priority. For the list of available criteria use --help-criteria. Default is %(default)s.")
+  parser.add_argument("-help-criteria", "--help-criteria", action='store_true', help="Prints the available criteria to the console and exits.")
   args, common_revision_args = parser.parse_known_args(sys.argv[1:])
 
+  if args.help_criteria:
+    print_criteria()
+    exit(0)
+
   global config_path, obsv_path, model_name, save_folder, skip_n_first
-  global toggle_stable_state, toggle_sync, toggle_async
+  global toggle_stable_state, toggle_sync, toggle_async, min_change_criteria
 
   config_path = args.config_folder
   obsv_path = args.observations
@@ -92,6 +101,13 @@ def parseArgs():
   stable = args.stable_state
   synchronous = args.synchronous
   asynchronous = args.asynchronous
+
+  if args.criteria:
+    common_revision_args += ["--criteria", args.criteria]
+    custom_criteria = args.criteria.split(',')
+    for x in custom_criteria:
+      assert x in CRITERIA, f"Invalid criterion specified: {x}. Use --help-criteria to see available criteria."
+    min_change_criteria = custom_criteria
 
   if not stable and not synchronous and not asynchronous:
     logger.info("Default mode: Stable State \U0001f6d1")
@@ -160,16 +176,56 @@ def getConfigsList():
   
   return configs_path_list
 
-try:
-  #-----Main-----
-  parseArgs()
+def get_models(model_path):
+  input_model_list = [os.path.join(model_path, f) for f in os.listdir(model_path)
+    if os.path.isfile(os.path.join(model_path,f)) and os.path.splitext(f)[1] == ".lp" or
+    os.path.splitext(f)[1] == ".bnet"]
+  return input_model_list
 
-  revision_base_args = f"-bulk -benchmark_naming -benchmark {save_folder}"
+def benchmark_filename(config_dir, obsv_file, snapshot):
+  filename = None
+  filename = os.path.split(os.path.split(config_dir)[0])[1] + "-" + os.path.basename(os.path.normpath(obsv_file))
+  if toggle_stable_state:
+    filename += "-stable_benchmark"
+  elif toggle_sync:
+    filename += "-sync_benchmark"
+  else:
+    filename += "-async_benchmark"
+
+  if snapshot:
+    filename += '-snapshot'
+  
+  filename += '.csv'
+  
+  save_path = None
+  save_path = os.path.join(save_folder, filename)
+  return save_path
+
+def error_row(model_path, error_type):
+  return (f"{model_path},{error_type},NaN,NaN,NaN,N/A,N/A,NaN,NaN,NaN," + 
+          ",".join(["NaN" for _ in min_change_criteria]) + "\n"
+  )
+
+def main():
+  global global_logger
+  global toggle_stable_state, toggle_sync, toggle_async
+  global min_change_criteria, skip_n_first
+  parseArgs()
 
   interaction_mode = None
   if toggle_stable_state: interaction_mode = "stable"
   elif toggle_sync: interaction_mode = "sync"
   elif toggle_async: interaction_mode = "async"
+
+  benchmark_header = (BCHMRK_MODEL_NAME, 
+    BCHMRK_MODEL_STATE, BCHMRK_MODEL_REVISION_TIME,
+    BCHMRK_MODEL_CONSISTENCY_TIME, BCHMRK_MODEL_REPAIR_TIME,
+    BCHMRK_COMPOUND_NAME, BCHMRK_COMPOUND_STATE,
+    BCHMARK_ORIGINAL_REGULATOR_NO,
+    BCHMARK_ORIGINAL_NODE_NO,
+    BCHMARK_COMPOUND_REPAIR_TIME,
+    *min_change_criteria
+  )
 
   configs_list = getConfigsList()
   obsv_list = getObsvList()
@@ -181,38 +237,55 @@ try:
   current_config_directory = None
   current_obs_number = 0
   current_config_number = 0
-
+  test_number = 1
   for obsv in obsv_list:
     current_observations = obsv
-    revision_obsv_args = f"-o {current_observations}"
     current_obs_number += 1
 
     for config in configs_list:
       current_config_number += 1
       current_config_directory = config
-      revision_model_args = f"-f {current_config_directory}"
-      
-      if skip_n_first > 0:
-        skip_n_first -= 1
-        global_logger.info(f"Skipping: Obsv({current_obs_number}/{len(obsv_list)}) || Config({current_config_number}/{len(configs_list)})")
-        continue
-      result = subprocess.run(['python', 'revision.py',
-      '-f', current_config_directory,
-      '-o', current_observations,
-      f'-{interaction_mode}',
-      '-bulk', '-benchmark_naming','-benchmark', save_folder] + common_revision_args,
-      capture_output=True
-      )
-      if result.returncode != 0:
-        global_logger.error(f"Revision process returned {result.returncode}"
-                            f"\n\nSTDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}")
-      elif result.stderr:
-        global_logger.error(f"Revision process had an error"
-                            f"\n\nSTDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}")
-      global_logger.info(f"Current progress: Obsv({current_obs_number}/{len(obsv_list)}) || Config({current_config_number}/{len(configs_list)})")
+      model_paths = get_models(current_config_directory)
+      save_filename = benchmark_filename(current_config_directory, obsv, snapshot=True)
+      with open(save_filename, "w") as save_file:
+        save_file.write(",".join(benchmark_header) + "\n")
+        for model_index, model_path in enumerate(model_paths):
+          test_id = (f"Test {test_number} - "
+            f"Obsv({current_obs_number}/{len(obsv_list)}) || "
+            f"Config({current_config_number}/{len(configs_list)}) || "
+            f"Model({model_index+1}/{len(model_paths)})"
+          )
+          if skip_n_first > 0:
+            skip_n_first -= 1
+            global_logger.info(f"Skipping: {test_id}")
+            continue
+          result = subprocess.run(['python', 'revision.py',
+            '-f', model_path,
+            '-o', current_observations,
+            f'-{interaction_mode}', '-benchmark'] + common_revision_args,
+            capture_output=True, text=True
+          )
+          if result.returncode < 0:
+            global_logger.error(f"Revision process was killed with code {result.returncode} (Out of memory?)")
+            save_file.write(error_row(model_path, "killed (out of memory?)"))
+          elif result.returncode != 0:
+            global_logger.error(f"Revision process returned {result.returncode}"
+                                f"\n\nSTDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}")
+            save_file.write(error_row(model_path, "error"))
+          elif result.stderr:
+            global_logger.error(f"Revision process had an error"
+                                f"\n\nSTDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}")
+            save_file.write(error_row(model_path, "error"))
+          else:
+            save_file.write(result.stdout)
+          global_logger.info(f"Current progress: {test_id}")
+          test_number += 1
+      final_filename = benchmark_filename(current_config_directory, obsv, snapshot=False)
+      shutil.move(save_filename, final_filename)
+      global_logger.info(f"Saved config results to {final_filename}")
     current_config_number = 0
     
   global_logger.info("Done!")
-except Exception as e:
-  print(e)
-  raise e
+
+if __name__ == "__main__":
+  main()

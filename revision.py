@@ -1,5 +1,4 @@
 import os, argparse, logging, time, re
-from genericpath import isdir
 from aux_scripts.consistency_functions import *
 from aux_scripts.conversion_functions import *
 from aux_scripts.repair_constants import *
@@ -33,9 +32,6 @@ obsv_path = None
 
 repair_save_path = None
 
-#Flag that enables the revision of multiple models at once
-bulk_enabled = False
-
 #Flag that enables benchmark mode
 # Note: Benchmark mode disables all prints, and produces an output file with
 # four columns: the first is the name of the revised file, the second is
@@ -45,11 +41,6 @@ bulk_enabled = False
 # and the fourth is only present in case of unsuccessful repairs, indicating
 # which functions could not be repaired.
 benchmark_enabled = False
-
-benchmark_naming = False
-
-#Benchmark save path
-benchmakr_write_folder = "None"
 
 #Mode flags 
 toggle_stable_state = True
@@ -89,8 +80,7 @@ def parseArgs():
   parser.add_argument("-sync", "--synchronous", action='store_true', help="Flag to check the consistency using synchronous observations (default is stable state).")
   parser.add_argument("-async", "--asynchronous", action='store_true', help="Flag to check the consistency using asynchronous observations (default is stable state).")
   parser.add_argument("-bulk", "--bulk", action='store_true', help="Enables the revision of multiple models at once. (Note: the path provided to -f must be the directory containing those models).")
-  parser.add_argument("-benchmark", "--benchmark_save_folder", help="Enables benchmark mode, saving benchmark results at the specified path.")
-  parser.add_argument("-benchmark_naming", "--benchmark_naming", action='store_true', help="Enables benchmark files to be saved with a more helpful name.")
+  parser.add_argument("-benchmark", "--benchmark_output", action='store_true', help="Enables benchmark mode, outputting benchmark results ato STDOUT.")
   parser.add_argument("-t", "--timeout", type=int, default=3600, help="How many seconds to wait for each function repair.")
   parser.add_argument("-p", "--parallel_mode", type=str, default=None,
                       help="What to pass to clingo's --parallel-mode argument. " \
@@ -107,7 +97,7 @@ def parseArgs():
     exit(0)
   global model_path, obsv_path, benchmakr_write_folder
   global toggle_stable_state, toggle_sync, toggle_async
-  global bulk_enabled, benchmark_enabled, benchmark_naming, parallel_mode
+  global benchmark_enabled, parallel_mode
   global min_change_criteria
 
   model_path = args.model_to_repair
@@ -119,8 +109,6 @@ def parseArgs():
   stable = args.stable_state
   synchronous = args.synchronous
   asynchronous = args.asynchronous
-  bulk = args.bulk
-  benchmark = args.benchmark_save_folder
 
   if args.criteria:
     custom_criteria = args.criteria.split(',')
@@ -134,19 +122,9 @@ def parseArgs():
     else:
       parallel_mode = args.parallel_mode
     logger.info(f"Parallel argument set to: --parallel-mode {parallel_mode}")
-  if bulk:
-    bulk_enabled = bulk  
   
-  if benchmark:
+  if args.benchmark_output:
     benchmark_enabled = True
-    if isdir(benchmark):
-      benchmakr_write_folder = benchmark
-    else:
-      logger.info("Specified save location is not a valid directory. Saving in model directory instead.")
-      benchmakr_write_folder = os.path.dirname(model_path)
-
-  if args.benchmark_naming: 
-    benchmark_naming = True
 
   if not stable and not synchronous and not asynchronous:
     logger.info("Default mode: Stable State \U0001f6d1")
@@ -179,36 +157,25 @@ def parseArgs():
 #in the second position
 def readModels():
   logger = logging.getLogger("readModels")
+  split_path = os.path.splitext(model_path)
+  model_extension = split_path[1]
 
-  input_model_list = [model_path]
-  output_model_list = []
+  if model_extension != ".bnet" and model_extension != ".lp":
+    logger.error("Unrecognized model format. Only models written in "
+    +".bnet or .lp format are accepted.")
+    return None
 
-  if bulk_enabled:
-    input_model_list = [os.path.join(model_path, f) for f in os.listdir(model_path)
-    if os.path.isfile(os.path.join(model_path,f)) and os.path.splitext(f)[1] == ".lp" or
-    os.path.splitext(f)[1] == ".bnet"]
+  model_file = open(model_path, 'r')
+  output_model = model_file.readlines()
+
+  if model_extension == ".bnet":
+    output_model = convertModelToLP(output_model,logger)
   
-  for current_model_path in input_model_list:
-    split_path = os.path.splitext(current_model_path)
-    model_extension = split_path[1]
-
-    if model_extension != ".bnet" and model_extension != ".lp":
-      logger.error("Unrecognized model format. Only models written in "
-      +".bnet or .lp format are accepted.")
-      return None
-
-    model_file = open(current_model_path, 'r')
-    output_model = model_file.readlines()
-
-    if model_extension == ".bnet":
-      output_model = convertModelToLP(output_model,logger)
+  else: output_model = "".join(output_model)
     
-    else: output_model = "".join(output_model)
-      
-    logger.debug("obtained model: \n" + output_model)
-    output_model_list.append((output_model,current_model_path))
+  logger.debug("obtained model: \n" + output_model)
   
-  return output_model_list
+  return (output_model, model_path)
 
 def getModelCompounds(model):
   return re.findall(r'compound\((.+?)\).',model)
@@ -254,17 +221,16 @@ def initRevisionStatsMap(model):
 #   function
 #Purpose: Fills the benchmark array with the results obtained from the model's
 # revision
-def fillBenchmarkArray(benchmark_array, model_name, final_state, 
+def outputBenchmarkArray(model_name, final_state, 
   revision_time, consistency_time, repair_time, model_revision_stats):
 
   for func in model_revision_stats:
-    benchmark_array.append(
-      (model_name, 
-      final_state, revision_time,
-      consistency_time, repair_time,
-      func, *model_revision_stats[func].values()
-      )
+    row = (model_name, 
+      final_state, str(revision_time),
+      str(consistency_time), str(repair_time),
+      func, *map(str, model_revision_stats[func].values())
     )
+    print(",".join(row))
 
 #Inputs: 
 # -func - the name of the compound whose function is being repaired
@@ -283,57 +249,6 @@ def processFunctionRepairStats(func, func_state, criteria_costs, repairs, repair
 
   for crit, cost in criteria_costs:
       revision_stats[func][crit] = cost
-
-#Input: array - the array containing the lines with benchmark results
-#  to write on the output file
-#Purpose: Saves the results from benchmarking in the specified save_path
-def saveBenchmark(array, snapshot=False):
-  logger = logging.getLogger("saveBenchmark")
-
-  filename = None
-  if benchmark_naming:
-    filename = os.path.split(os.path.split(model_path)[0])[1] + "-" + os.path.basename(os.path.normpath(obsv_path))
-  else:
-    filename = os.path.basename(os.path.normpath(model_path)) + "-" + os.path.basename(os.path.normpath(obsv_path))
-
-
-  if toggle_stable_state:
-    filename += "-stable_benchmark"
-  elif toggle_sync:
-    filename += "-sync_benchmark"
-  else:
-    filename += "-async_benchmark"
-
-  snapshot_filename = filename + '-snapshot.csv'
-  if snapshot:
-    filename = snapshot_filename
-  else:
-    filename += '.csv'
-  
-  save_path = None
-  if benchmakr_write_folder:
-    save_path = os.path.join(benchmakr_write_folder, filename)
-  else:
-    save_path = os.path.join(os.path.dirname(model_path), filename)
-    if bulk_enabled:
-      save_path = os.path.join(model_path, filename)
-
-  logger.debug("Save path: " + str(save_path))
-
-  f = open(save_path, 'w')
-
-  for line in array:
-    for column_idx in range(0,len(line)):
-      f.write(str(line[column_idx]))
-
-      if (column_idx != len(line)-1):
-        f.write(",\t")
-       
-    f.write("\n")
-  f.close()
-  if not snapshot and os.path.exists(snapshot_filename):
-    os.remove(snapshot_filename)
-  logger.info("Saved benchmark to: " + str(save_path))
 
 
 
@@ -431,64 +346,48 @@ def main():
   parseArgs()
   # First, obtain the model in .lp model. If the obtained file has .bnet
   # extension, it must be converted to .lp.
-  models = readModels()
-  benchmark_array = [(BCHMRK_MODEL_NAME, 
-    BCHMRK_MODEL_STATE, BCHMRK_MODEL_REVISION_TIME,
-    BCHMRK_MODEL_CONSISTENCY_TIME, BCHMRK_MODEL_REPAIR_TIME,
-    BCHMRK_COMPOUND_NAME, BCHMRK_COMPOUND_STATE,
-    BCHMARK_ORIGINAL_REGULATOR_NO,
-    BCHMARK_ORIGINAL_NODE_NO,
-    BCHMARK_COMPOUND_REPAIR_TIME,
-    *min_change_criteria
-    )]
+  model = readModels()
 
-  for model in models:
-    final_state = "consistent"
-    total_revision_time = 0
-    total_consistency_time = 0
-    total_repair_time = 0
+  final_state = "consistent"
+  total_revision_time = 0
+  total_consistency_time = 0
+  total_repair_time = 0
 
-    revision_start_time = time.monotonic()
-    model_revision_stats = initRevisionStatsMap(model[0])
+  revision_start_time = time.monotonic()
+  model_revision_stats = initRevisionStatsMap(model[0])
 
-    if bulk_enabled and not benchmark_enabled: print("Currently revising model ", model[1])
+  if not benchmark_enabled: print("Currently revising model ", model[1])
+  global_logger.info(f"Currently revising model {model[1]}")
+
+  consistency_start_time = time.monotonic()
+  inconsistencies = checkConsistency(model[0], obsv_path)
+  consistency_end_time = time.monotonic()
+
+  total_consistency_time = consistency_end_time - consistency_start_time
+
+  # Second, check the consistency of the .lp model using the provided observations
+  # and time step. If the model is consistent, print a message saying so.
+  if inconsistencies:
+    if not benchmark_enabled: print("Inconsistent model! \nRepairing...")
     global_logger.info(f"Currently revising model {model[1]}")
 
-    consistency_start_time = time.monotonic()
-    inconsistencies = checkConsistency(model[0], obsv_path)
-    consistency_end_time = time.monotonic()
+    # Third, if it is not, proceed with the repairs and print out the necessary ones.
+    repair_start_time = time.monotonic()
+    final_state = repair(model[0], inconsistencies, model_revision_stats)
+    repair_end_time = time.monotonic()
 
-    total_consistency_time = consistency_end_time - consistency_start_time
+    total_repair_time = repair_end_time - repair_start_time
+    
+    if not benchmark_enabled and "repaired" in final_state: print(f"Applying the above repairs to model {model[1]} will render it consistent!\n")
 
-    # Second, check the consistency of the .lp model using the provided observations
-    # and time step. If the model is consistent, print a message saying so.
-    if inconsistencies:
-      if not benchmark_enabled: print("Inconsistent model! \nRepairing...")
-      global_logger.info(f"Currently revising model {model[1]}")
+  revision_end_time = time.monotonic()
+  total_revision_time = revision_end_time - revision_start_time
 
-      # Third, if it is not, proceed with the repairs and print out the necessary ones.
-      repair_start_time = time.monotonic()
-      final_state = repair(model[0], inconsistencies, model_revision_stats)
-      repair_end_time = time.monotonic()
-
-      total_repair_time = repair_end_time - repair_start_time
-      
-      if not benchmark_enabled and "repaired" in final_state: print(f"Applying the above repairs to model {model[1]} will render it consistent!\n")
-
-    revision_end_time = time.monotonic()
-    total_revision_time = revision_end_time - revision_start_time
-
-    if benchmark_enabled:
-      fillBenchmarkArray(benchmark_array, model[1], final_state,
+  if benchmark_enabled:
+    outputBenchmarkArray(model[1], final_state,
         total_revision_time, 
         total_consistency_time,
         total_repair_time, model_revision_stats)
-      saveBenchmark(benchmark_array, snapshot=True)
-
-  if benchmark_enabled:
-    saveBenchmark(benchmark_array)
-  else:
-    global_logger.info("Benchmarking disabled, not saving.")
 
 if __name__ == "__main__":
   try:
