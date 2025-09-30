@@ -86,4 +86,13 @@ def uniquify(path):
 
     return path
 
-
+def clingo_logger(logger):
+  from clingo import MessageCode
+  if logger is None:
+    return lambda _, __ : None
+  def log_clingo_message(code : MessageCode, msg : str):
+    if code == MessageCode.AtomUndefined:
+      logger.debug(f"Clingo message {code} - {msg}")
+    else:
+      logger.error(f"Clingo error {code} - {msg}")
+  return log_clingo_message

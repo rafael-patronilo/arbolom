@@ -3,6 +3,7 @@ import time, clingo
 from aux_scripts.repair_criteria import build_asp_change_criteria
 from aux_scripts.repair_prints import printStatistics
 from aux_scripts import deepening_search
+from aux_scripts.common import clingo_logger
 
 #Path of the encodings to obtain inconsistent functions
 inconsistent_functions_path = "encodings/repairs/auxiliary/inconsistent_functions.lp"
@@ -127,7 +128,7 @@ def generateFunctionsClingo(node_number, timeout_start,
     clingo_args.append(f"--parallel-mode")
     clingo_args.append(parallel_mode)
       
-  ctl = clingo.Control(arguments=clingo_args, logger= lambda a,b: None)
+  ctl = clingo.Control(arguments=clingo_args, logger=clingo_logger(logger))
 
   ctl.add("base", [], program=upo_program)
 
@@ -280,6 +281,7 @@ def generatePreviousObservations(func, inconsistencies, toggle_sync, toggle_asyn
 
   return functions
 
+
 #Inputs: 
 # -prev_obs, a string containing all previous observations
 #Purpose: Returns a tuple with all unique positive observations,
@@ -291,11 +293,17 @@ def processPreviousObservations(prev_obs, logger=None):
     
   uniques_map = {}
 
-  output = ""
+  upo_program = []
+  upos = []
 
   current_experiment = ""
   current_timestep = ""
   current_state_key = []
+
+  def save_upo():
+    sorted_state = frozenset(current_state_key)
+    if sorted_state not in uniques_map:
+      uniques_map[sorted_state] = (current_experiment, str(int(current_timestep) + 1))
 
   start = time.time()
   for previous_obsv in prev_obs:
@@ -311,7 +319,7 @@ def processPreviousObservations(prev_obs, logger=None):
       current_timestep = timestep
 
     #If we're still looking at the same experiment and timestep
-    if current_experiment + current_timestep == experiment + timestep:
+    if (current_experiment, current_timestep) == (experiment, timestep):
 
       #If the compound is active, it will be a part of this timestep's 
       # state key
@@ -321,10 +329,7 @@ def processPreviousObservations(prev_obs, logger=None):
     else: #We are looking at a different experiment or timestep
 
       #Save previous timestep's state in the map, if it didn't exist yet
-      sorted_state = frozenset(current_state_key)
-
-      if sorted_state not in uniques_map:
-          uniques_map[sorted_state] = current_experiment + ","+ str(int(current_timestep) + 1)
+      save_upo()
    
       current_experiment = experiment
       current_timestep = timestep
@@ -332,18 +337,17 @@ def processPreviousObservations(prev_obs, logger=None):
 
       if state == "1":
         current_state_key.append(compound)
-
+  
   #End of loop, last timestep's state must be saved
-  sorted_state = frozenset(current_state_key)
-
-  if sorted_state not in uniques_map:
-    uniques_map[sorted_state] = current_experiment + ","+ str(int(current_timestep) + 1)
+  save_upo()
 
   #Print result in LP format
-  for value in uniques_map.values():
-    output += "unique_positive_observation(" + value + ").\n"
+  upos = list(uniques_map.values())
+  for value in upos:
+    upo_program.append(f"unique_positive_observation({','.join(value)}).\n")
 
+  
+  total_upos = len(upos)
   end = time.time()
   if logger: logger.debug(f"Python code time for unique positive observations: {end - start}s\n")
-  total_upos = len(uniques_map.values())
-  return (output, total_upos)
+  return (''.join(upo_program), total_upos, upos)
