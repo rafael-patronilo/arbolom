@@ -158,6 +158,7 @@ def generateFunctionsClingo(node_number, timeout_start,
     nonlocal function, costs
     function = str(m).split(" ")
     costs = m.cost
+    if logger: logger.debug(f"New model. Costs: {costs}")
 
   with ctl.solve(on_model=on_model, async_=True) as handle:
     if logger: logger.debug(f"Waiting at most {repair_timeout} seconds for optimal solution")
@@ -248,7 +249,7 @@ def processInconsistentFunctions(inconsistent_functions, enable_prints=False):
 def generatePreviousObservations(func, inconsistencies, toggle_sync, toggle_async, path_mode=False, logger=None):
   clingo_args = ["0", f"-c compound={func}"]
   
-  ctl = clingo.Control(arguments=clingo_args)
+  ctl = clingo.Control(arguments=clingo_args, logger=clingo_logger(logger))
 
   if path_mode:
     ctl.load(inconsistencies)
