@@ -4,6 +4,8 @@ from aux_scripts.repair_criteria import build_asp_change_criteria
 from aux_scripts.repair_prints import printStatistics
 from aux_scripts import deepening_search
 from aux_scripts.common import clingo_logger
+from collections import defaultdict
+from dataclasses import dataclass
 
 #Path of the encodings to obtain inconsistent functions
 inconsistent_functions_path = "encodings/repairs/auxiliary/inconsistent_functions.lp"
@@ -288,67 +290,57 @@ def generatePreviousObservations(func, inconsistencies, toggle_sync, toggle_asyn
 #Purpose: Returns a tuple with all unique positive observations,
 # and the total number of unique positive observations
 def processPreviousObservations(prev_obs, logger=None):
-
   if not prev_obs:
-    return ""
-    
-  uniques_map = {}
-
-  upo_program = []
-  upos = []
-
-  current_experiment = ""
-  current_timestep = ""
-  current_state_key = []
-
-  def save_upo():
-    sorted_state = frozenset(current_state_key)
-    if sorted_state not in uniques_map:
-      uniques_map[sorted_state] = (current_experiment, str(int(current_timestep) + 1))
-
-  start = time.time()
+    return ("",0)
+  start = time.monotonic()
+  observations = defaultdict(list)
+  compounds = set()
+  
   for previous_obsv in prev_obs:
     arguments = previous_obsv.split(')')[0].split('(')[1].split(',')
     experiment = arguments[0]
     timestep = arguments[1]
     compound = arguments[2]
     state = arguments[3]
-
-    #First iteration
-    if not current_experiment:
-      current_experiment = experiment
-      current_timestep = timestep
-
-    #If we're still looking at the same experiment and timestep
-    if (current_experiment, current_timestep) == (experiment, timestep):
-
-      #If the compound is active, it will be a part of this timestep's 
-      # state key
-      if state == "1":
-        current_state_key.append(compound)
-
-    else: #We are looking at a different experiment or timestep
-
-      #Save previous timestep's state in the map, if it didn't exist yet
-      save_upo()
-   
-      current_experiment = experiment
-      current_timestep = timestep
-      current_state_key = []
-
-      if state == "1":
-        current_state_key.append(compound)
+    observations[(experiment, timestep)].append((compound, state))
+    compounds.add(compound)
   
-  #End of loop, last timestep's state must be saved
-  save_upo()
-
-  #Print result in LP format
-  upos = list(uniques_map.values())
-  for value in upos:
-    upo_program.append(f"unique_positive_observation({','.join(value)}).\n")
-
+  @dataclass(frozen=False) # We will need to write to the field state_key
+  class Unique:
+    obs_id : tuple[str, str]
+    state_key : frozenset[tuple[str,str]]
   
-  total_upos = len(upos)
-  end = time.time()
-  if logger: logger.debug(f"Python code time for unique positive observations: {end - start}s\n")
-  return (''.join(upo_program), total_upos, upos)
+  uniques = {}
+  for obs_id, state in observations.items():
+    value = Unique(obs_id, frozenset(state))
+    uniques[value.state_key] = value
+  if logger: logger.debug(f"Reduced from {len(observations)} to {len(uniques)} just excluding exact matches")
+  
+  uniques = uniques.values()
+  # input upos for repair should include all unique obs, to keep the information of which compounds should be irrelevant
+  upos = "\n".join([f"unique_positive_observation({','.join(unique.obs_id)})." for unique in uniques])
+  
+  # But for max node limit we can exclude irrelevant compounds
+  # We do this by "fusing" states where the only difference is a compound
+  if logger: logger.debug(f"Compounds present: {' '.join(compounds)}")
+  old_len = len(uniques) + 1
+  while old_len > len(uniques):
+    old_len = len(uniques)
+    if logger: logger.debug(f"Cycling all compounds to attempt simplification")
+    for c in compounds:
+      new_uniques = {}
+      for unique in uniques:
+        new_state_key = frozenset(x for x in unique.state_key if x[0] != c)
+        present = new_uniques.get(new_state_key)
+        if present:
+          if present.state_key != unique.state_key:    # means this compound is not relevant for this conjoint, therefore
+            present.state_key = new_state_key          # exclude irrelevant compound from state key
+        else: new_uniques[new_state_key] = unique
+      if len(new_uniques) < len(uniques):
+        if logger: logger.debug(f"New reduction using compound {c}: {len(uniques)} to {len(new_uniques)}")
+        uniques = new_uniques.values()
+  
+  end = time.monotonic()
+  if logger: logger.debug(f"Finished upo counting in {end-start}s; Final count {len(uniques)}")
+  
+  return (upos, len(uniques))

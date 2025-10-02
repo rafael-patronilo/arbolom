@@ -296,7 +296,7 @@ def repair(model, inconsistencies, revision_stats):
       func_logger.info(f"Beginning repairs for function {func}")
       prev_obs = generatePreviousObservations(func, inconsistencies, 
         toggle_sync, toggle_async, logger = func_logger)
-      upo = processPreviousObservations(prev_obs, logger = func_logger)
+      upo= processPreviousObservations(prev_obs, logger = func_logger)[1]
       
       compound_repair_start = time.monotonic()
       result, functions, costs = generateFunctions(func, model, inconsistencies, upo, min_change_criteria, args.timeout,
