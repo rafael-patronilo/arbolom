@@ -81,7 +81,7 @@ timestep_positive_node(E,T,N) :- not timestep_negative_node(E,T,N), node_ID(N), 
 
 %6-Used node IDs must be continuous
 % In other words, if an available id higher than another availabe id is used than the lower id must also be used
-:- available_node_ID(N1), available_node_ID(N2), N1 < N2, nodeID(N2), not node_ID(N1).
+:- available_node_ID(N1), available_node_ID(N2), N1 < N2, node_ID(N2), not node_ID(N1).
 
 %Display
 regulator_activator(C) :- node_regulator(N,C), activator(C).
