@@ -86,13 +86,26 @@ def uniquify(path):
 
     return path
 
-def clingo_logger(logger):
+def clingo_logger(logger : logging.Logger, optional_predicates : list[tuple[str,int]] | None = None):
   from clingo import MessageCode
   if logger is None:
     return lambda _, __ : None
+  if optional_predicates is None:
+    optional_predicates = []
   def log_clingo_message(code : MessageCode, msg : str):
-    if code == MessageCode.AtomUndefined:
-      logger.debug(f"Clingo message {code} - {msg}")
-    else:
-      logger.error(f"Clingo error {code} - {msg}")
+    nonlocal logger, optional_predicates
+    try:
+      if code == MessageCode.AtomUndefined:
+        parts = msg.split('\n')[1].split('(')
+        pred = (parts[0].strip(), sum(1 for c in parts[1] if c == ',') + 1)
+        if pred in optional_predicates:
+          logger.debug(f"Optional predicate {pred[0]}/{pred[1]} not present\nClingo message {code}\n{msg}")
+        else:
+          logger.error(f"Predicate {pred[0]}/{pred[1]} not present\nClingo message {code}\n{msg}\n"
+                      f"If this is intended include ({pred[0]},{pred[1]}) in the "
+                      "optional_predicates argument of the clingo logger")
+      else:
+        logger.error(f"Clingo error {code}\n{msg}")
+    except Exception as e: 
+        logger.exception(f"Unexpected message format caused a {e} exception\nClingo message {code}\n{msg}")
   return log_clingo_message

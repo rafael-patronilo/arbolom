@@ -14,6 +14,7 @@ inconsistent_functions_path = "encodings/repairs/auxiliary/inconsistent_function
 previous_observations_sync_path = "encodings/repairs/auxiliary/previous_observations_sync.lp"
 previous_observations_async_path = "encodings/repairs/auxiliary/previous_observations_async.lp"
 
+OPTIONAL_REPAIR_PREDICATES = [('fixed', 2), ('fixed', 3)]
 #Paths of the encodings that generating functions
 repair_encoding_stable_path = "encodings/repairs/repairs_stable.lp"
 repair_encoding_sync_path = "encodings/repairs/repairs_sync.lp"
@@ -136,7 +137,7 @@ def generateFunctionsClingo(node_number,
     soft_timeout = repair_timeout
     hard_timeout = 0
 
-  ctl = clingo.Control(arguments=clingo_args, logger=clingo_logger(logger))
+  ctl = clingo.Control(arguments=clingo_args, logger=clingo_logger(logger, optional_predicates=OPTIONAL_REPAIR_PREDICATES))
 
   ctl.add("base", [], program=upo_program)
 
