@@ -155,7 +155,7 @@ def parseArgs():
 # format), and returns them in a list. Each element of the list is a tuple,
 #with the model in string format in the first position and the model's path
 #in the second position
-def readModels():
+def readModel():
   logger = logging.getLogger("readModels")
   split_path = os.path.splitext(model_path)
   model_extension = split_path[1]
@@ -288,18 +288,24 @@ def repair(model, inconsistencies, revision_stats):
   suboptimal_repairs = []
   unrepairable_functions = []
 
+  timeout_end = time.monotonic() + args.timeout
+  
   if i_f_array:
-    for func in i_f_array:
+    for i, func in enumerate(i_f_array):
+      now = time.monotonic()
+      hard_timeout = timeout_end - now
+      soft_timeout = hard_timeout / (len(i_f_array) - i)
+      hard_timeout = max(0, hard_timeout - soft_timeout)
       func_state = "repaired"
       if not benchmark_enabled: printFuncRepairStart(func)
       func_logger = logging.getLogger(func)
       func_logger.info(f"Beginning repairs for function {func}")
       prev_obs = generatePreviousObservations(func, inconsistencies, 
         toggle_sync, toggle_async, logger = func_logger)
-      upo= processPreviousObservations(prev_obs, logger = func_logger)[1]
+      upo= processPreviousObservations(prev_obs, logger = func_logger)
       
       compound_repair_start = time.monotonic()
-      result, functions, costs = generateFunctions(func, model, inconsistencies, upo, min_change_criteria, args.timeout,
+      result, functions, costs = generateFunctions(func, model, inconsistencies, upo, min_change_criteria, (soft_timeout, hard_timeout),
         toggle_stable_state, toggle_sync, toggle_async, parallel_mode=parallel_mode, logger = func_logger)
       compound_repair_end = time.monotonic()
       
@@ -346,7 +352,7 @@ def main():
   parseArgs()
   # First, obtain the model in .lp model. If the obtained file has .bnet
   # extension, it must be converted to .lp.
-  model = readModels()
+  model = readModel()
 
   final_state = "consistent"
   total_revision_time = 0

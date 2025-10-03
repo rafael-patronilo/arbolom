@@ -77,7 +77,7 @@ def generateFunctions(func, model, incst, upo, min_change_criteria, repair_timeo
   if min_change_criteria[0] == 'term-number':
     if logger: logger.info("Switching to former version to take advantage of deepening search")
     return deepening_search.generateFunctions(
-      func, model, incst, upo, toggle_stable_state, toggle_sync, toggle_async, 
+      repair_timeout, func, model, incst, upo, toggle_stable_state, toggle_sync, toggle_async, 
       min_change_criteria[1:], path_mode, logger)
   function = []
   upo_program = ""
@@ -87,11 +87,11 @@ def generateFunctions(func, model, incst, upo, min_change_criteria, repair_timeo
   if logger: 
     logger.debug(f"Trying to find a solution with at most ({max_node_limit}) nodes...")
     if math.isinf(max_node_limit): logger.error("Node limit is infinite")
-  timeout_start = time.time()
-  no_timeout, function, costs = generateFunctionsClingo(max_node_limit, timeout_start, repair_timeout, func, model, 
+  
+  optimal, function, costs = generateFunctionsClingo(max_node_limit, repair_timeout, func, model, 
                                                         incst, upo_program, min_change_criteria,
                                     toggle_stable_state, toggle_sync, toggle_async, parallel_mode, path_mode, logger)
-  if not no_timeout: 
+  if not optimal: 
     if logger: logger.warning(f"Search timed out. If a solution was found, it will be suboptimal.")
     result = "timeout"
   elif function:
@@ -118,7 +118,7 @@ def generateFunctions(func, model, incst, upo, min_change_criteria, repair_timeo
 # path_mode - flag that enables loading the model and inconsistencies from a file, instead of a string
 # enable_prints - enables additional prints
 #Purpose: Calls clingo to solve the repair encoding
-def generateFunctionsClingo(node_number, timeout_start, 
+def generateFunctionsClingo(node_number,
                              repair_timeout, func, model,
                              incst, upo_program, min_change_criteria,
                              toggle_stable_state, toggle_sync, toggle_async, 
@@ -129,7 +129,13 @@ def generateFunctionsClingo(node_number, timeout_start,
   if parallel_mode:
     clingo_args.append(f"--parallel-mode")
     clingo_args.append(parallel_mode)
-      
+  
+  if isinstance(repair_timeout, tuple):
+    soft_timeout, hard_timeout = repair_timeout
+  else:
+    soft_timeout = repair_timeout
+    hard_timeout = 0
+
   ctl = clingo.Control(arguments=clingo_args, logger=clingo_logger(logger))
 
   ctl.add("base", [], program=upo_program)
@@ -154,19 +160,29 @@ def generateFunctionsClingo(node_number, timeout_start,
 
   ctl.ground([("base", [])])
   function = []
+  cancelling = False
   costs = None
 
   def on_model(m):
-    nonlocal function, costs
+    nonlocal function, costs, cancelling
     function = str(m).split(" ")
     costs = m.cost
     if logger: logger.debug(f"New model. Costs: {costs}")
+    if cancelling:
+      if logger: logger.debug(f"Soft timeout passed, interrupting")
+      return False
 
   with ctl.solve(on_model=on_model, async_=True) as handle:
-    if logger: logger.debug(f"Waiting at most {repair_timeout} seconds for optimal solution")
-    no_timeout = handle.wait(repair_timeout) # - (time.time() - timeout_start))
-    if logger and not no_timeout: logger.debug("Timeout; Cancelling...")
-    handle.cancel()
+    if logger: logger.debug(f"Waiting at most {soft_timeout} seconds for optimal solution")
+    no_timeout = handle.wait(soft_timeout)
+    if not no_timeout:
+      if logger: logger.debug("Soft timeout reached; Checking if there is a suboptimal solution...")
+      if not function:
+        if logger: logger.debug(f"No solution, waiting at most {hard_timeout} seconds for any solution")
+        cancelling = True
+        handle.wait(hard_timeout)
+      elif logger: logger.debug("Suboptimal solution already found, interrupting")
+      handle.cancel()
   
   if logger: logger.debug(ctl.statistics)
   return no_timeout, function, costs
@@ -195,7 +211,7 @@ def determineStartNodesAndLimit(func,model,upo,path_mode):
     f.close()
   else:
     original_nodes = int(model.split(f"function({func},")[1].split(')')[0])
-
+  
   return original_nodes, node_limit
 
 
@@ -299,7 +315,7 @@ def processPreviousObservations(prev_obs, logger=None):
   for previous_obsv in prev_obs:
     arguments = previous_obsv.split(')')[0].split('(')[1].split(',')
     experiment = arguments[0]
-    timestep = arguments[1]
+    timestep = str(int(arguments[1]) + 1)
     compound = arguments[2]
     state = arguments[3]
     observations[(experiment, timestep)].append((compound, state))

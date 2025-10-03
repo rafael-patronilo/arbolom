@@ -14,9 +14,6 @@ repair_encoding_stable_path = "encodings/repairs/deepening_search/repairs_stable
 repair_encoding_sync_path = "encodings/repairs/deepening_search/repairs_sync.lp"
 repair_encoding_async_path = "encodings/repairs/deepening_search/repairs_async.lp"
 
-#Timeout for function repair
-repair_timeout = 3600
-
 
 #-----Functions that solve LPs with clingo-----
 #Input:
@@ -63,11 +60,13 @@ def generateInconsistentFunctions(model, inconsistencies, debug_mode=False, path
 # path_mode - flag that enables loading the model and inconsistencies from a file, instead of a string
 # enable_prints - enables additional prints
 #Purpose: Generates a function that is compatible with previously given observations, based on the obtained inconsistencies
-def generateFunctions(func, model, incst, upo, toggle_stable_state, toggle_sync, toggle_async, min_change_criteria, path_mode = False, logger=None):
+def generateFunctions(repair_timeout, func, model, incst, upo, toggle_stable_state, toggle_sync, toggle_async, min_change_criteria, path_mode = False, logger=None):
   if logger:
-    logger.warning("Some changes are still being ported to this version. "
-      "Parallel mode is not available.")
+    logger.warning("Some changes are still being ported to this version. ")
     logger.debug("Calculating repairs...")
+  
+  if isinstance(repair_timeout, tuple):
+    repair_timeout = repair_timeout[0]
   
   def make_return_tuple(result, function, variation):
     costs = function[1] if function[1] is None else [variation] + function[1]
@@ -81,14 +80,15 @@ def generateFunctions(func, model, incst, upo, toggle_stable_state, toggle_sync,
   if upo : upo_program = upo[0]
   starting_node_number, max_node_limit = determineStartNodesAndLimit(func,model,upo,path_mode)
 
-  timeout_start = time.time()
+  timeout_start = time.monotonic()
   while True:
     if current_variation == 0:
       if logger: logger.info(f"Trying to find a solution with the same ({starting_node_number}) number of nodes...")
       node_number = starting_node_number
-      timed_out, function = generateFunctionsClingo(node_number, timeout_start, func, model, incst,
-                                         upo_program, toggle_stable_state, toggle_sync, 
-                                         toggle_async, min_change_criteria, path_mode, logger)
+      timed_out, function = generateFunctionsClingo(node_number, repair_timeout - (time.monotonic() - timeout_start), 
+                                        func, model, incst,
+                                        upo_program, toggle_stable_state, toggle_sync, 
+                                        toggle_async, min_change_criteria, path_mode, logger)
       if timed_out: return make_return_tuple('timeout', function, 0)
           
     else:
@@ -96,18 +96,20 @@ def generateFunctions(func, model, incst, upo, toggle_stable_state, toggle_sync,
       function_above = None
       if high_node_number <= max_node_limit:
         if logger: logger.info(f"Trying to find a solution with {starting_node_number + current_variation} nodes...(max is {max_node_limit})")
-        timed_out, function_above = generateFunctionsClingo(high_node_number, timeout_start, func, model, incst, 
-                                                 upo_program, toggle_stable_state, toggle_sync, 
-                                                 toggle_async, min_change_criteria, path_mode, logger)
+        timed_out, function_above = generateFunctionsClingo(high_node_number, repair_timeout - (time.monotonic() - timeout_start),
+                                                func, model, incst, 
+                                                upo_program, toggle_stable_state, toggle_sync, 
+                                                toggle_async, min_change_criteria, path_mode, logger)
         if timed_out: return make_return_tuple('timeout', function_above, current_variation)
       
       low_node_number = starting_node_number - current_variation
       function_below = None
       if low_node_number > 0:
         if logger: logger.info(f"Trying to find a solution with {starting_node_number - current_variation} nodes...(minimum is 1)")
-        timed_out, function_below = generateFunctionsClingo(low_node_number, timeout_start, func, model, incst, 
-                                                 upo_program, toggle_stable_state, toggle_sync, 
-                                                 toggle_async, min_change_criteria, path_mode, logger)
+        timed_out, function_below = generateFunctionsClingo(low_node_number, repair_timeout - (time.monotonic() - timeout_start),
+                                                func, model, incst, 
+                                                upo_program, toggle_stable_state, toggle_sync, 
+                                                toggle_async, min_change_criteria, path_mode, logger)
 
       function, final_variation = compareAndGetBestFunction(function_above, function_below, current_variation)
 
@@ -153,7 +155,7 @@ def compareAndGetBestFunction(function_above, function_below, variation):
 # path_mode - flag that enables loading the model and inconsistencies from a file, instead of a string
 # enable_prints - enables additional prints
 #Purpose: Calls clingo to solve the repair encoding
-def generateFunctionsClingo(node_number, timeout_start, func, model, incst, upo_program, toggle_stable_state, toggle_sync, toggle_async, min_change_criteria, path_mode = False, logger=None):
+def generateFunctionsClingo(node_number, repair_timeout, func, model, incst, upo_program, toggle_stable_state, toggle_sync, toggle_async, min_change_criteria, path_mode = False, logger=None):
   no_timeout = True
   clingo_args = ["0", f"-c compound={func}", f"-c node_number={node_number}"]
       
@@ -188,7 +190,7 @@ def generateFunctionsClingo(node_number, timeout_start, func, model, incst, upo_
     costs = m.cost
 
   with ctl.solve(on_model=on_model, async_=True) as handle:
-    no_timeout = handle.wait(repair_timeout - (time.time() - timeout_start))
+    no_timeout = handle.wait(repair_timeout)
     handle.cancel()
   
   if logger: printStatistics(ctl.statistics, logger.debug)
