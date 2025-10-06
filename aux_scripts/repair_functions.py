@@ -14,7 +14,7 @@ inconsistent_functions_path = "encodings/repairs/auxiliary/inconsistent_function
 previous_observations_sync_path = "encodings/repairs/auxiliary/previous_observations_sync.lp"
 previous_observations_async_path = "encodings/repairs/auxiliary/previous_observations_async.lp"
 
-OPTIONAL_REPAIR_PREDICATES = [('fixed', 2), ('fixed', 3)]
+OPTIONAL_REPAIR_PREDICATES = [('fixed', 2), ('fixed', 3), ('unique_positive_observation', 2)]
 #Paths of the encodings that generating functions
 repair_encoding_stable_path = "encodings/repairs/repairs_stable.lp"
 repair_encoding_sync_path = "encodings/repairs/repairs_sync.lp"

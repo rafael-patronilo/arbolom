@@ -102,7 +102,7 @@ def clingo_logger(logger : logging.Logger, optional_predicates : list[tuple[str,
           logger.debug(f"Optional predicate {pred[0]}/{pred[1]} not present\nClingo message {code}\n{msg}")
         else:
           logger.error(f"Predicate {pred[0]}/{pred[1]} not present\nClingo message {code}\n{msg}\n"
-                      f"If this is intended include ({pred[0]},{pred[1]}) in the "
+                      f"If this is intended include {pred} in the "
                       "optional_predicates argument of the clingo logger")
       else:
         logger.error(f"Clingo error {code}\n{msg}")
