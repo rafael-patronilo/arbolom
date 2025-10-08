@@ -162,6 +162,7 @@ def getObsvList():
 def getConfigsList():
 
   configs_path_list = []
+  exact_model_name = None
 
   #For each file system entity inside the Configurations folder
   for config_folder in os.listdir(config_path):
@@ -172,8 +173,16 @@ def getConfigsList():
       for model_folder in os.listdir(os.path.join(config_path, config_folder)):
         #If it matches the name of the model passed as an argument, add it to the list
         if model_name in model_folder:
+          if exact_model_name is None:
+            exact_model_name = model_folder
+          elif model_folder != exact_model_name:
+            if model_folder == model_name:
+              exact_model_name = model_folder
+              configs_path_list.clear()
+            else:
+              continue
           configs_path_list.append(os.path.join(config_path, config_folder, model_folder))
-  
+  global_logger.info(f"Model search term '{model_name}' solved to '{exact_model_name}'")
   return configs_path_list
 
 def get_models(model_path):
@@ -244,6 +253,7 @@ def main():
 
     for config in configs_list:
       current_config_number += 1
+      global_logger.info(f"Starting config {config}")
       current_config_directory = config
       model_paths = get_models(current_config_directory)
       save_filename = benchmark_filename(current_config_directory, obsv, snapshot=True)
