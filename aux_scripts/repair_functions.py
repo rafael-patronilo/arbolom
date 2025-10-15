@@ -285,7 +285,7 @@ def generatePreviousObservations(func, inconsistencies, toggle_sync, toggle_asyn
   ctl.ground([("base", [])])
   functions = []
 
-  if logger: logger.debug("Calculating previous observations...")
+  if logger: logger.debug("Calculating previous positive observations...")
 
   with ctl.solve(yield_=True) as handle:
     for model in handle:
@@ -296,7 +296,7 @@ def generatePreviousObservations(func, inconsistencies, toggle_sync, toggle_asyn
   if logger: printStatistics(ctl.statistics, print_func=logger.debug)
 
   if not functions[0]: #If there are no previous observations
-    if logger: logger.warning("No previous observations found.")
+    if logger: logger.debug("No previous positive observations found.")
     return []
 
   return functions
