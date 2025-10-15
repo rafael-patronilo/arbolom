@@ -28,6 +28,10 @@ CRITERIA = {
         "#minimize{{1@{p}, N : available_node_ID(N), not node_ID(N), function(compound, TERM_NO), N <= TERM_NO}}.",
         "Optimize for the minimum number of removed terms from the old formula."
     ),
+    "term-number" : RepairCriterion(
+        "#minimize{{D@{p}, D : function(compound, TERM_NO), new_term_no(N), D = |TERM_NO - N|}}.",
+        "Optimize for the minimum difference in the number of terms in the new formula."
+    ),
 
 
     "extra-regulators" : RepairCriterion(
@@ -63,11 +67,11 @@ CRITERIA = {
 
 # Default criteria:
 # 1-Optimize for the minimum changes to number of terms (highest priority by default)
-CRITERIA["term-number"] = CRITERIA["extra-terms"].combine(
-    CRITERIA["missing-terms"], 
-    "Optimize for the minimum number of changes to the number of terms in the new formula. "
-    "Combines 'extra-terms' and 'missing-terms'."
-)
+# CRITERIA["term-number"] = CRITERIA["extra-terms"].combine(
+#     CRITERIA["missing-terms"], 
+#     "Optimize for the minimum number of changes to the number of terms in the new formula. "
+#     "Combines 'extra-terms' and 'missing-terms'."
+# )
 # 2-Optimize for the minimum changes to regulators (second highest priority by default)
 CRITERIA["regulators"] = CRITERIA["extra-regulators"].combine(
     CRITERIA["missing-regulators"], 

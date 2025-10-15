@@ -48,6 +48,9 @@ available_node_ID(1..max_node_number):- function(compound, TERM_NO), max_node_nu
 %Project the node IDs our solution is using into their own predicate
 node_ID(N) :- node_regulator(N,_).
 
+%Count used nodes for minimization if required
+new_term_no(N) :- N = #count{I : node_ID(I)}.
+
 %If a node N1 has some regulating compound C which is not present in node N2,
 %then N1 is distinct from N2 (used in IC #3)
 distinct_nodes(N1,N2) :- node_regulator(N1,C), node_ID(N2), N1 < N2, not node_regulator(N2,C). 
@@ -85,10 +88,11 @@ timestep_positive_node(E,T,N) :- not timestep_negative_node(E,T,N), node_ID(N), 
 %     %6-We must always have node_number nodes in our solution
 %     % :- node_number != #count{N : node_regulator(N,R)}. 
 
-%6-Used node IDs must be continuous
-% In other words, if an available id higher than another availabe id is used than the lower id must also be used
-% :- available_node_ID(N1), available_node_ID(N2), N1 < N2, node_ID(N2), not node_ID(N1).
 
+% 6- New used node IDs must be continuous
+% In other words, if an available id higher than another id is used than the lower id must also be used
+:- node_ID(N2), available_node_ID(N1), N2 > N1, not node_ID(N1), function(compound, TERM_NO), 
+          N2 > TERM_NO.
 
 %Display
 regulator_activator(C) :- node_regulator(N,C), activator(C).
