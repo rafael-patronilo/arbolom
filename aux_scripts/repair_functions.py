@@ -72,7 +72,7 @@ def generateInconsistentFunctions(model, inconsistencies, debug_mode=False, path
 #Purpose: Generates a function that is compatible with previously given observations, based on the obtained inconsistencies
 def generateFunctions(func, model, incst, upo, min_change_criteria, repair_timeout,
                       toggle_stable_state, toggle_sync, toggle_async, 
-                      parallel_mode=None, path_mode = False, logger=None):
+                      parallel_mode=None, path_mode = False, logger=None, cost_bounds = None):
   if logger: logger.debug("Calculating repairs...")
 
   if min_change_criteria[0] == 'term-number':
@@ -89,9 +89,11 @@ def generateFunctions(func, model, incst, upo, min_change_criteria, repair_timeo
     logger.debug(f"Trying to find a solution with at most ({max_node_limit}) nodes...")
     if math.isinf(max_node_limit): logger.error("Node limit is infinite")
   
-  optimal, function, costs = generateFunctionsClingo(max_node_limit, repair_timeout, func, model, 
-                                                        incst, upo_program, min_change_criteria,
-                                    toggle_stable_state, toggle_sync, toggle_async, parallel_mode, path_mode, logger)
+  optimal, function, costs = generateFunctionsClingo(max_node_limit, repair_timeout, func,
+                                    model, incst, upo_program, min_change_criteria,
+                                    toggle_stable_state, toggle_sync, toggle_async, 
+                                    parallel_mode, path_mode, logger,
+                                    cost_bounds=cost_bounds)
   if not optimal: 
     if logger: logger.warning(f"Search timed out. If a solution was found, it will be suboptimal.")
     result = "timeout"
@@ -124,9 +126,12 @@ def generateFunctionsClingo(node_number,
                              incst, upo_program, min_change_criteria,
                              toggle_stable_state, toggle_sync, toggle_async, 
                              parallel_mode=None,
-                             path_mode = False, logger=None):
+                             path_mode = False, logger=None,
+                             cost_bounds=None):
   no_timeout = True
   clingo_args = ["0", f"-c compound={func}", f"-c max_node_number={node_number}"]
+  if cost_bounds: clingo_args.append(f"--opt-mode=opt,{','.join(map(str,cost_bounds))}")
+  else: clingo_args.append("--opt-mode=opt")
   if parallel_mode:
     clingo_args.append(f"--parallel-mode")
     clingo_args.append(parallel_mode)
@@ -136,7 +141,7 @@ def generateFunctionsClingo(node_number,
   else:
     soft_timeout = repair_timeout
     hard_timeout = 0
-
+  if logger: logger.debug(f"Starting clingo with args {clingo_args}")
   ctl = clingo.Control(arguments=clingo_args, logger=clingo_logger(logger, optional_predicates=OPTIONAL_REPAIR_PREDICATES))
 
   ctl.add("base", [], program=upo_program)

@@ -5,7 +5,7 @@ from aux_scripts.repair_constants import *
 from aux_scripts.repair_functions import *
 from aux_scripts.repair_prints import *
 from aux_scripts.repair_criteria import CRITERIA, print_criteria
-from collections import OrderedDict
+from collections import OrderedDict, deque
 
 #Usage: $python revision.py -f (FILENAME) -o (OBSERVATIONS) -stable -sync -async -bulk -benchmark (SAVE_PATH)
 #Optional flags:
@@ -273,6 +273,47 @@ def checkConsistency(model, obsv):
     logger.debug("Inconsistencies found")
   return inconsistencies 
 
+
+def recover_timeouts(model, inconsistencies, revision_stats, to_recover, timeout_end):
+  time_left = timeout_end - time.monotonic()
+  if time_left <= 0:
+    logging.info(f"No time left, suboptimally repaired functions won't be recovered")
+    return [x[0] for x in to_recover]
+  to_recover = deque(to_recover)
+  
+  logging.info(f"{time_left}s left and there's suboptimally repaired functions, attempting to recover in remaining time")
+  while len(to_recover) > 0 and time_left > 0:
+    model_timeout = time_left / len(to_recover)
+    func, upo, old_costs, orig_repair_time = to_recover.popleft()
+    func_logger = logging.getLogger(func)
+    func_logger.info(f"Attempting to recover {func}")
+    compound_repair_start = time.monotonic()
+    result, functions, costs = generateFunctions(func, model, inconsistencies, upo, min_change_criteria, (model_timeout, 0),
+      toggle_stable_state, toggle_sync, toggle_async, parallel_mode=parallel_mode, logger = func_logger, cost_bounds=old_costs)
+    repair_time = time.monotonic() - compound_repair_start + orig_repair_time
+    func_state = None
+    if result == "repaired":
+      func_logger.info(f"Successful recovery - reached optimal repairs for {func}")
+      func_state = "repaired"
+    else:
+      if functions and costs and tuple(costs) < tuple(old_costs):
+        func_logger.warning(f"Unsuccessful recovery - reached better non optimal repairs for {func}")
+        func_state = "suboptimally repaired (timed out)"
+        to_recover.append((func, upo, costs, repair_time)) # try again later
+      else:
+        func_logger.warning(f"Unsuccessful recovery - no improvement for {func}")
+        to_recover.append((func, upo, old_costs, repair_time)) # try again later
+    if func_state: # means there was an improvement
+      criteria_costs = list(zip(min_change_criteria, costs))
+      processFunctionRepairStats(func, func_state, criteria_costs, functions, repair_time, revision_stats)
+      logRepairedLP(func, functions, criteria_costs, to_stdout=not benchmark_enabled, logger=func_logger)
+    else: revision_stats[func][BCHMARK_COMPOUND_REPAIR_TIME] = repair_time
+    time_left = timeout_end - time.monotonic()
+  if len(to_recover) == 0:
+    logging.info("Recovery successful for all functions")
+  else: logging.warning("Run out of time, no further recovery attempts will be made")
+  return [x[0] for x in to_recover]
+
 #Inputs: 
 # -model - the model being repaired
 # -inconsistencies - the inconsistencies obtained from consistency checking
@@ -285,15 +326,14 @@ def repair(model, inconsistencies, revision_stats):
   final_state = "repaired"
 
   timed_out_functions = []
-  suboptimal_repairs = []
+  to_recover = []
   unrepairable_functions = []
 
   timeout_end = time.monotonic() + args.timeout
   
   if i_f_array:
     for i, func in enumerate(i_f_array):
-      now = time.monotonic()
-      hard_timeout = timeout_end - now
+      hard_timeout = timeout_end - time.monotonic()
       soft_timeout = hard_timeout / (len(i_f_array) - i)
       hard_timeout = max(0, hard_timeout - soft_timeout)
       func_state = "repaired"
@@ -308,12 +348,12 @@ def repair(model, inconsistencies, revision_stats):
       result, functions, costs = generateFunctions(func, model, inconsistencies, upo, min_change_criteria, (soft_timeout, hard_timeout),
         toggle_stable_state, toggle_sync, toggle_async, parallel_mode=parallel_mode, logger = func_logger)
       compound_repair_end = time.monotonic()
-      
+      repair_time = compound_repair_end - compound_repair_start
 
       if result == "timeout": 
         if functions:
           func_state = "suboptimally repaired (timed out)"
-          suboptimal_repairs.append(func)
+          to_recover.append((func, upo, costs, repair_time))
         else:
           func_state = "inconsistent (timed out)"
           timed_out_functions.append(func)
@@ -329,11 +369,14 @@ def repair(model, inconsistencies, revision_stats):
         costs = [float('nan')] * len(min_change_criteria)
       criteria_costs = list(zip(min_change_criteria, costs))
 
-      processFunctionRepairStats(func, func_state, criteria_costs, functions, compound_repair_end - compound_repair_start, revision_stats)
+      processFunctionRepairStats(func, func_state, criteria_costs, functions, repair_time, revision_stats)
 
       logRepairedLP(func, functions, criteria_costs, to_stdout=not benchmark_enabled, logger=func_logger)
       if not benchmark_enabled: printFuncRepairEnd(func)
-    
+  if to_recover:
+    suboptimal_repairs = recover_timeouts(model, inconsistencies, revision_stats, to_recover, timeout_end)
+  else:
+    suboptimal_repairs = []
   if timed_out_functions and unrepairable_functions:
     final_state = "still inconsistent (timed out functions and functions without existing solutions)"
   elif timed_out_functions:
