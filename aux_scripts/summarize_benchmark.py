@@ -71,6 +71,8 @@ def initSummaryTable(df : pd.DataFrame) -> pd.DataFrame:
   tuples = []
   for field in time_fields:
     tuples.append(('Global Times', field))
+  for field in time_fields:
+    tuples.append(('No timeout', field))
   for state in model_states:
     for field in time_fields:
       tuples.append((state, field))
@@ -100,6 +102,8 @@ def calcModelStateCounts(df : pd.DataFrame, summary: pd.DataFrame):
     print(f"\t{state}\t:{count}")
 
 def writeStatistics(df : pd.DataFrame, first_index : str, summary: pd.DataFrame):
+  for field in df.columns:
+    summary.loc[(first_index, field), 'Count'] = len(df)
   statistics = [
     ('Mean', df.mean()),
     ('Std', df.std()),
@@ -114,8 +118,15 @@ def writeStatistics(df : pd.DataFrame, first_index : str, summary: pd.DataFrame)
 def summarizeTimes(df : pd.DataFrame, summary: pd.DataFrame):
   time_cols = [col for col in df.columns if 'Time' in col and col != COLS.BCHMARK_COMPOUND_REPAIR_TIME]
   by_model = groupby_model(df).first()
+  no_timeout_rows = df[COLS.BCHMRK_COMPOUND_STATE].map(lambda s : 'timed out' not in s)
   writeStatistics(by_model[time_cols], 'Global Times', summary)
   writeStatistics(df[[COLS.BCHMARK_COMPOUND_REPAIR_TIME]], 'Global Times', summary)
+  
+  no_timeout_rows = by_model[COLS.BCHMRK_MODEL_STATE].map(lambda s : 'timed out' not in s)
+  writeStatistics(by_model[no_timeout_rows][time_cols], 'No timeout', summary)
+  no_timeout_rows = df[COLS.BCHMRK_MODEL_STATE].map(lambda s : 'timed out' not in s)
+  writeStatistics(df[no_timeout_rows][[COLS.BCHMARK_COMPOUND_REPAIR_TIME]], 'No timeout', summary)
+  
   for k, v in df.groupby([COLS.BCHMRK_MODEL_STATE]):
     by_model = groupby_model(v).first()
     writeStatistics(by_model[time_cols], k[0], summary)
@@ -123,8 +134,12 @@ def summarizeTimes(df : pd.DataFrame, summary: pd.DataFrame):
 
 def summarizeRepairs(df : pd.DataFrame, summary: pd.DataFrame):
   repair_cols = [col for col in df.columns if col in REPAIR_COLS]
-  repairs = df[df[COLS.BCHMRK_COMPOUND_STATE] == 'repaired'][repair_cols]
+  repairs = df[df[COLS.BCHMRK_COMPOUND_STATE].map(lambda s: 'repaired' in s)][repair_cols]
   writeStatistics(repairs, 'Repairs', summary)
+  repaired_states = [s for s in df[COLS.BCHMRK_COMPOUND_STATE].unique() if 'repaired' in s]
+  for s in repaired_states:
+    repairs = df[df[COLS.BCHMRK_COMPOUND_STATE] == s][repair_cols]
+    writeStatistics(repairs, f'Repairs - {s}', summary)
 
 def writeTo(summary: pd.DataFrame, output_file: Path):
   if output_file.exists():
@@ -156,7 +171,7 @@ def writeTo(summary: pd.DataFrame, output_file: Path):
 
 def summarize(df: pd.DataFrame):
   summary = initSummaryTable(df)
-  calcModelStateCounts(df, summary)
+  #calcModelStateCounts(df, summary)
   summarizeTimes(df, summary)
   summarizeRepairs(df, summary)
   return summary
