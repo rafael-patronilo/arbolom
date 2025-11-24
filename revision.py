@@ -7,6 +7,8 @@ from aux_scripts.repair_prints import *
 from aux_scripts.repair_criteria import CRITERIA, print_criteria
 from collections import OrderedDict, deque
 
+SANITY_CHECKS = True
+
 #Usage: $python revision.py -f (FILENAME) -o (OBSERVATIONS) -stable -sync -async -bulk -benchmark (SAVE_PATH)
 #Optional flags:
 #-stable -> Performs repairs using stable state observations (default).
@@ -360,6 +362,8 @@ def repair(model, inconsistencies, revision_stats):
       elif result == "no_solution": 
         unrepairable_functions.append(func)
         func_state = "inconsistent (no solution)"
+      elif result != "repaired":
+        raise Exception(f"Unexpected result {result}")
       if functions:
         assert costs is not None
       func_logger.info(f"Completed repairing of {func}, final state: {func_state}")
@@ -368,12 +372,16 @@ def repair(model, inconsistencies, revision_stats):
       if costs is None:
         costs = [float('nan')] * len(min_change_criteria)
       criteria_costs = list(zip(min_change_criteria, costs))
-
+        
       processFunctionRepairStats(func, func_state, criteria_costs, functions, repair_time, revision_stats)
 
       logRepairedLP(func, functions, criteria_costs, to_stdout=not benchmark_enabled, logger=func_logger)
       if not benchmark_enabled: printFuncRepairEnd(func)
+      if SANITY_CHECKS:
+        func_logger.info("Counting repairs to confirm ASP optimization counts. You can disable this by setting SANITY_CHECKS to False")
+        repair_count_sanity_check(func, model, functions, criteria_costs, func_logger)
   if to_recover:
+    if not benchmark_enabled: print("Now going back to recover timed out repairs")
     suboptimal_repairs = recover_timeouts(model, inconsistencies, revision_stats, to_recover, timeout_end)
   else:
     suboptimal_repairs = []
@@ -413,12 +421,13 @@ def main():
   consistency_end_time = time.monotonic()
 
   total_consistency_time = consistency_end_time - consistency_start_time
+  global_logger.info(f"Consistency checking finished in {total_consistency_time}s - Consistent: {not inconsistencies}")
 
   # Second, check the consistency of the .lp model using the provided observations
   # and time step. If the model is consistent, print a message saying so.
   if inconsistencies:
     if not benchmark_enabled: print("Inconsistent model! \nRepairing...")
-    global_logger.info(f"Currently revising model {model[1]}")
+    global_logger.info(f"Currently repairing model {model[1]}")
 
     # Third, if it is not, proceed with the repairs and print out the necessary ones.
     repair_start_time = time.monotonic()
@@ -426,11 +435,15 @@ def main():
     repair_end_time = time.monotonic()
 
     total_repair_time = repair_end_time - repair_start_time
-    
-    if not benchmark_enabled and "repaired" in final_state: print(f"Applying the above repairs to model {model[1]} will render it consistent!\n")
+    global_logger.info(f"Repair finished in {total_repair_time}s - Final state: {final_state}")
+    if not benchmark_enabled:
+      print(f"Repair finished - Final state: {final_state}")
+      if "repaired" in final_state:
+        print(f"Applying the above repairs to model {model[1]} will render it consistent!\n")
 
   revision_end_time = time.monotonic()
   total_revision_time = revision_end_time - revision_start_time
+  global_logger.info(f"Revision finished in {total_revision_time}s - Final state: {final_state}")
 
   if benchmark_enabled:
     outputBenchmarkArray(model[1], final_state,

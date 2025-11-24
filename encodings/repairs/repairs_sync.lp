@@ -48,9 +48,6 @@ available_node_ID(1..max_node_number):- function(compound, TERM_NO), max_node_nu
 %Project the node IDs our solution is using into their own predicate
 node_ID(N) :- node_regulator(N,_).
 
-%Count used nodes for minimization if required
-new_term_no(N) :- N = #count{I : node_ID(I)}.
-
 %If a node N1 has some regulating compound C which is not present in node N2,
 %then N1 is distinct from N2 (used in IC #3)
 distinct_nodes(N1,N2) :- node_regulator(N1,C), node_ID(N2), N1 < N2, not node_regulator(N2,C). 
