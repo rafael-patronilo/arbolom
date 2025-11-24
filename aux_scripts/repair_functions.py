@@ -73,7 +73,7 @@ def generateInconsistentFunctions(model, inconsistencies, debug_mode=False, path
 def generateFunctions(func, model, incst, upo, min_change_criteria, repair_timeout,
                       toggle_stable_state, toggle_sync, toggle_async, 
                       parallel_mode=None, path_mode = False, logger=None, cost_bounds = None):
-  if logger: logger.debug("Calculating repairs...")
+  if logger: logger.debug("Calculating repairs... (version with aux predicates)")
 
   if min_change_criteria[0] == 'term-number':
     if logger: logger.info("Switching to former version to take advantage of deepening search")

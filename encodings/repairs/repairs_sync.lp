@@ -95,6 +95,38 @@ timestep_positive_node(E,T,N) :- not timestep_negative_node(E,T,N), node_ID(N), 
 regulator_activator(C) :- node_regulator(N,C), activator(C).
 regulator_inhibitor(C) :- node_regulator(N,C), inhibitor(C).
 
+%*--Identifying missing/extra regulators (minimization #1)--*%
+%An original_regulator C is a regulator that is present in the original inconsistent function
+original_regulator(C) :- regulates(C,compound,_).
+
+%If a regulator C is present in node N, then we define it as a present_regulator
+present_regulator(C) :- node_regulator(N,C).
+
+%If an original regulator C is not present in any node, we define it as a missing_regulator
+missing_regulator(C) :- original_regulator(C), not present_regulator(C).
+
+%If a present regulator C is not one of the original regulators, we define it as an extra_regulator
+extra_regulator(C) :- not original_regulator(C), present_regulator(C).
+
+%*--Identifying sign changes (minimization #2)--*%
+%(used in minimization #2)
+sign_changed(C) :- regulates(C,compound,0), inhibitor(C).
+sign_changed(C) :- regulates(C,compound,1), activator(C).
+
+%*--Identifying node format changes (optimizations #3)--*%
+%If we have a regulator R in term ID of compound's original function, but our
+%solution does not have regulator R in the node with the same ID, then that node
+%has a missing regulator
+missing_node_regulator(ID,R) :- term(compound, ID, R), node_ID(ID), not node_regulator(ID, R).
+
+%If we have a regulator R in node ID, but our original function does not have 
+%regulator R in the term with the same ID, then that node has an
+%extra regulator
+extra_node_regulator(ID,R) :- node_regulator(ID, R), term(compound, ID, _), not term(compound, ID, R).
+
+missing_full_node(N) :- available_node_ID(N), not node_ID(N), function(compound, TERM_NO), N <= TERM_NO.
+extra_full_node(N) :- node_ID(N), function(compound, TERM_NO), N > TERM_NO.
+
 #show node_ID/1.
 #show regulator_activator/1.
 #show regulator_inhibitor/1.

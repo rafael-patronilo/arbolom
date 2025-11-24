@@ -21,41 +21,43 @@ class RepairCriterion:
 # ASP basic optimization criteria (Combined criteria are built afterwards)
 CRITERIA = {
     "extra-terms" : RepairCriterion(
-        "#minimize{{1@{p}, N : node_ID(N), function(compound, TERM_NO), N > TERM_NO}}.", 
+        "#minimize{{1@{p}, N : extra_full_node(N)}}.", 
         "Optimize for the minimum number of added terms to the new formula."
     ),
     "missing-terms" : RepairCriterion(
-        "#minimize{{1@{p}, N : available_node_ID(N), not node_ID(N), function(compound, TERM_NO), N <= TERM_NO}}.",
+        "#minimize{{1@{p}, N : missing_full_node(N)}}.",
         "Optimize for the minimum number of removed terms from the old formula."
     ),
 
 
     "extra-regulators" : RepairCriterion(
-        "#minimize{{1@{p}, C : not regulates(C,compound,_), node_regulator(_,C)}}.",
+        "#minimize{{1@{p}, C : extra_regulator(C)}}.",
         "Optimize for the minimum number of added regulators in the new formula."
     ),
     "missing-regulators" : RepairCriterion(
-        "#minimize{{1@{p}, C : regulates(C,compound,_), not node_regulator(_,C)}}.",
+        "#minimize{{1@{p}, C : missing_regulator(C)}}.",
         "Optimize for the minimum number of removed regulators from the old formula."
     ),
 
 
-    "sign-to-inhibitor" : RepairCriterion(
-        "#minimize{{1@{p}, C : regulates(C,compound,0), inhibitor(C)}}.",
-        "Optimize for the minimum number of activators changed to inhibitors."
+    #"sign-to-inhibitor" : RepairCriterion(
+    #    "#minimize{{1@{p}, C : regulates(C,compound,0), inhibitor(C)}}.",
+    #    "Optimize for the minimum number of activators changed to inhibitors."
+    #),
+    #"sign-to-activator" : RepairCriterion(
+    #    "#minimize{{1@{p}, C : regulates(C,compound,1), activator(C)}}.",
+    #    "Optimize for the minimum number of inhibitors changed to activators."
+    #),
+    "signs" : RepairCriterion(
+        "#minimize{{1@{p}, C : sign_changed(C)}}."
     ),
-    "sign-to-activator" : RepairCriterion(
-        "#minimize{{1@{p}, C : regulates(C,compound,1), activator(C)}}.",
-        "Optimize for the minimum number of inhibitors changed to activators."
-    ),
-
 
     "term-missing-regulator" : RepairCriterion(
-        "#minimize{{1@{p}, ID, R : term(compound, ID, R), node_ID(ID), not node_regulator(ID, R)}}.",
+        "#minimize{{1@{p}, ID, R : missing_node_regulator(ID,R)}}.",
         "Optimize for the minimum number of missing regulators in each term of the new formula."
     ),
     "term-extra-regulator" : RepairCriterion(
-        "#minimize{{1@{p}, ID, R : node_regulator(ID, R), term(compound, ID, _), not term(compound, ID, R)}}.",
+        "#minimize{{1@{p}, ID, R : extra_node_regulator(ID,R)}}.",
         "Optimize for the minimum number of extra regulators in each term of the new formula."
     )
 }
@@ -74,11 +76,11 @@ CRITERIA["regulators"] = CRITERIA["extra-regulators"].combine(
     "Combines 'extra-regulators' and 'missing-regulators'."
 )
 # 3-Optimize for the minimum changes to signs (third highest priority by default)
-CRITERIA["signs"] = CRITERIA["sign-to-inhibitor"].combine(
-    CRITERIA["sign-to-activator"],
-    "Optimize for the minimum number of changed regulator signs in the new formula. "
-    "Combines 'sign-to-inhibitor' and 'sign-to-activator'."
-)
+#CRITERIA["signs"] = CRITERIA["sign-to-inhibitor"].combine(
+#    CRITERIA["sign-to-activator"],
+#    "Optimize for the minimum number of changed regulator signs in the new formula. "
+#    "Combines 'sign-to-inhibitor' and 'sign-to-activator'."
+#)
 # 4-Optimize for the minimum changes to term format (lowest priority by default)
 CRITERIA["term-format"] = CRITERIA["term-missing-regulator"].combine(
     CRITERIA["term-extra-regulator"], 
