@@ -74,7 +74,7 @@ def generateFunctions(repair_timeout, func, model, incst, upo, toggle_stable_sta
 
   current_variation = 0
   final_variation = 0
-  function = ([], None)
+  function = None
   timed_out = False
   upo_program = ""
   if upo : upo_program = upo[0]
@@ -195,7 +195,8 @@ def generateFunctionsClingo(node_number, repair_timeout, func, model, incst, upo
   
   if logger: printStatistics(ctl.statistics, logger.debug)
   
-  return not no_timeout, (function, costs)
+  if not function: return not no_timeout, None
+  else: return not no_timeout, (function, costs)
 
 #Inputs:
 # func - the inconsistent function

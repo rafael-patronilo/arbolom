@@ -362,8 +362,9 @@ def repair(model, inconsistencies, revision_stats):
       elif result == "no_solution": 
         unrepairable_functions.append(func)
         func_state = "inconsistent (no solution)"
-      elif result != "repaired":
-        raise Exception(f"Unexpected result {result}")
+      elif result == "repaired":
+        assert functions
+      else: raise Exception(f"Unexpected result {result}")
       if functions:
         assert costs is not None
       func_logger.info(f"Completed repairing of {func}, final state: {func_state}")
