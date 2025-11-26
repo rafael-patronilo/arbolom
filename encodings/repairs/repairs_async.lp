@@ -79,9 +79,10 @@ timestep_positive_node(E,T,N) :- not timestep_negative_node(E,T,N), node_ID(N), 
 %5-Fixed regulators must be present in the final solution
 :- fixed_regulator(C), not node_regulator(_,C).
 
-%6-Used node IDs must be continuous
-% In other words, if an available id higher than another availabe id is used than the lower id must also be used
-% :- available_node_ID(N1), available_node_ID(N2), N1 < N2, node_ID(N2), not node_ID(N1).
+% 6- New used node IDs must be continuous
+% In other words, if an available id higher than another id is used than the lower id must also be used
+:- node_ID(N2), available_node_ID(N1), N2 > N1, not node_ID(N1), function(compound, TERM_NO), 
+          N2 > TERM_NO.
 
 %Display
 regulator_activator(C) :- node_regulator(N,C), activator(C).

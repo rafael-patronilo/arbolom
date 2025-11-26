@@ -82,6 +82,11 @@ timestep_positive_node(E,T,N) :- not timestep_negative_node(E,T,N), node_ID(N), 
 %6-We must always have node_number nodes in our solution
 :- node_number != #count{N : node_regulator(N,R)}.
 
+% 7 - New used node IDs must be continuous
+% In other words, if an available id higher than another id is used than the lower id must also be used
+:- node_ID(N2), available_node_ID(N1), N2 > N1, not node_ID(N1), function(compound, TERM_NO), 
+          N2 > TERM_NO.
+
 
 %Display
 regulator_activator(C) :- node_regulator(N,C), activator(C).
