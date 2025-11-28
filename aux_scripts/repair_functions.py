@@ -6,6 +6,7 @@ from aux_scripts import deepening_search
 from aux_scripts.common import clingo_logger
 from collections import defaultdict
 from dataclasses import dataclass
+from pprint import pformat
 
 #Path of the encodings to obtain inconsistent functions
 inconsistent_functions_path = "encodings/repairs/auxiliary/inconsistent_functions.lp"
@@ -417,22 +418,37 @@ def repair_count_sanity_check(func, orig_model, repaired_model, repair_counts, l
                   f"\n{orig_regulators = }\n{new_regulators = }\n"
                   f"\n{orig_signs = }\n{new_signs = }\n"
                   f"\n{orig_terms = }\n{new_terms = }")
+    
+  n_new_terms = sum(1 for new_term in new_terms if len(new_term) > 0)
+  #node id continuity check
+  if n_new_terms < len(new_terms): assert len(new_terms) <= len(orig_terms)
   
   real_counts = {
-    "extra-terms" : max(0, len(new_terms) - len(orig_terms)),
-    "missing-terms" : max(0, len(orig_terms) - len(new_terms)),
+    "extra-terms" : max(0, n_new_terms - len(orig_terms)),
+    "missing-terms" : max(0, len(orig_terms) - n_new_terms),
     "extra-regulators" : len(new_regulators - orig_regulators),
     "missing-regulators" : len(orig_regulators - new_regulators),
-    "sign-to-inhibitor" : sum(1 for r in common_regulators if new_signs[r] == '-' and orig_signs[r] == '+'),
-    "sign-to-activator" : sum(1 for r in common_regulators if new_signs[r] == '+' and orig_signs[r] == '-'),
-    "term-extra-regulator" : sum(len(new_term - orig_term) for new_term, orig_term in zip(new_terms, orig_terms)),
-    "term-missing-regulator" : sum(len(orig_term - new_term) for new_term, orig_term in zip(new_terms, orig_terms))
+    "sign-to-inhibitor" : sum(
+      1 for r in common_regulators 
+      if new_signs[r] == '-' and orig_signs[r] == '+'),
+    "sign-to-activator" : sum(
+      1 for r in common_regulators
+      if new_signs[r] == '+' and orig_signs[r] == '-'),
+    "term-extra-regulator" : sum(
+      len(new_term - orig_term) for orig_term, new_term  in zip(orig_terms, new_terms)
+    ),
+    "term-missing-regulator" : sum(
+      len(orig_term - new_term) for orig_term, new_term  in zip(orig_terms, new_terms)
+      if len(new_term) > 0 # exclude removed nodes
+    )
   }
   real_counts["term-number"] = real_counts["extra-terms"] + real_counts["missing-terms"]
   real_counts["regulators"] = real_counts["extra-regulators"] + real_counts["missing-regulators"]
   real_counts["signs"] = real_counts["sign-to-inhibitor"] + real_counts["sign-to-activator"]
   real_counts["term-format"] = real_counts["term-missing-regulator"] + real_counts["term-extra-regulator"]
   real_counts["terms"] = real_counts["term-number"] + real_counts["term-format"]
+  if logger:
+    logger.debug(f"Changes found:\n{pformat(real_counts)}")
   
   for crit, count in repair_counts:
     real_c = real_counts.get(crit)

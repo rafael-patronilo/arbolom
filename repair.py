@@ -219,6 +219,7 @@ def repair(model, inconsistencies):
 
 #-----Main-----
 if cmd_enabled:
+  raise Exception("This script is not currently working - use revision.py instead")
   parseArgs()
 
   start_time = time.time()

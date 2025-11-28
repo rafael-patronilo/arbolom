@@ -18,59 +18,14 @@ def printIFTVEnd():
 
 #Inputs: The inconsistent function, and the resulting answer set obtained from clingo
 #Purpose: Prints the repairs in LP format
-def logRepairedLP(inconsistent_func, repairs, criteria_costs, to_stdout=True, logger = None):
-  activators = ""
-  inhibitors = ""
+def logRepairedLP(inconsistent_func, function_lp, criteria_costs, to_stdout=True, logger = None):
+  if to_stdout: 
+    print("\033[1;32mRepairs: \033[0;37;40m")
+    print(function_lp)
 
-  node_max_ID = 1
-  node_ID_map = {} 
-  nodes = {}
-  
-  if repairs:
-    for atom in repairs:
-      if len(atom) == 0:
-        continue
-      try: arguments = atom.split(')')[0].split('(')[1].split(',')
-      except Exception as e:
-        if logger: logger.error(f"Error parsing atom {atom}:", exc_info=e)
-        continue
+  logChanges(criteria_costs, to_stdout=to_stdout, logger=logger)
 
-      if "regulator_activator" in atom:
-        activators += f"regulates({arguments[0]}, {inconsistent_func}, 0).\n"
-      elif "regulator_inhibitor" in atom:
-        inhibitors += f"regulates({arguments[0]}, {inconsistent_func}, 1).\n"
-      elif "node_regulator" in atom:
-        unsorted_node_ID = arguments[0]
-        regulator = arguments[1]
-
-        #Makes sure nodes are outputted using ordered IDs
-        if unsorted_node_ID not in node_ID_map.keys():
-          node_ID_map[unsorted_node_ID] = node_max_ID
-          node_max_ID += 1
-
-        node_ID = node_ID_map[unsorted_node_ID]
-
-        if node_ID in nodes:
-          nodes[node_ID].append(regulator)
-        else:
-          nodes[node_ID] = [regulator]
-
-    repairs = f"%Regulators of {inconsistent_func}\n" + activators + inhibitors +"\n"
-    repairs += f"%Regulatory function of {inconsistent_func}\nfunction({inconsistent_func}, {len(nodes.keys())}).\n"
-
-    for node_ID in nodes.keys():
-      regulators = nodes[node_ID]
-
-      for reg in regulators:
-        repairs += f"term({inconsistent_func}, {node_ID}, {reg}).\n"
-    
-    if to_stdout: 
-      print("\033[1;32mRepairs: \033[0;37;40m")
-      print(repairs)
-
-    logChanges(criteria_costs, to_stdout=to_stdout, logger=logger)
-
-    if logger: logger.info(f"Repairs for function {inconsistent_func}:\n{repairs}")
+  if logger: logger.info(f"Repairs for function {inconsistent_func}:\n{function_lp}")
 
 def logChanges(criteria_costs, to_stdout=True, logger = None):
   if to_stdout:

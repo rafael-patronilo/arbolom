@@ -1,11 +1,12 @@
 import os, argparse, logging, time, re
+from aux_scripts.common import parse_atom
 from aux_scripts.consistency_functions import *
 from aux_scripts.conversion_functions import *
 from aux_scripts.repair_constants import *
 from aux_scripts.repair_functions import *
 from aux_scripts.repair_prints import *
 from aux_scripts.repair_criteria import CRITERIA, print_criteria
-from collections import OrderedDict, deque
+from collections import OrderedDict, deque, defaultdict
 
 SANITY_CHECKS = True
 
@@ -276,7 +277,73 @@ def checkConsistency(model, obsv):
   return inconsistencies 
 
 
-def recover_timeouts(model, inconsistencies, revision_stats, to_recover, timeout_end):
+def model_to_dict(model):
+  if isinstance(model, str):
+    model = model.split("\n")
+  original_functions = OrderedDict()
+  def function_container():
+    return {"state": "consistent", "regulators" : [], "function" : "", "terms" : []}
+  for atom in model:
+    predicate, terms = parse_atom(atom)
+    if predicate == "compound":
+      original_functions.setdefault(terms[0], function_container())
+    elif predicate == "regulates":
+      original_functions.setdefault(terms[1], function_container())["regulators"].append(atom)
+    elif predicate == "function":
+      original_functions.setdefault(terms[0], function_container())["function"] = atom
+    elif predicate == "term":
+      original_functions.setdefault(terms[0], function_container())["terms"].append(atom)
+    else: assert predicate is None, f"Unknown predicate {predicate}: {atom}"
+  return original_functions
+
+def format_function_dict(compound, function_dict) -> str:
+  sb = []
+  compound_state = function_dict.get("state")
+  if compound_state:
+    sb.append(f"%Compound {compound}'s final state is {compound_state}")
+  sb.append(f"%Regulators of {compound}")
+  for regulator_atom in function_dict["regulators"]:
+    sb.append(regulator_atom)
+  sb.append("")
+  sb.append(f"%Regulatory function of {compound}")
+  sb.append(function_dict["function"])
+  for term_atom in function_dict["terms"]:
+    sb.append(term_atom)
+  sb.append("")
+  return '\n'.join(sb)
+
+def format_model_dict(model_dict):
+  compound_sb = ["%Compounds"]
+  main_sb = []
+  
+  for compound, function_dict in model_dict.items():
+    compound_sb.append(f"compound({compound}). % state = {function_dict.get("state")}")
+    main_sb.append(format_function_dict(compound, function_dict))
+  return '\n'.join(compound_sb) + '\n' + '\n'.join(main_sb)
+    
+
+def repair_model_dict(model_dict, compound, repairs, compound_state) -> dict:
+  function_dict = {"state": compound_state, "regulators" : [], "function" : "", "terms" : []}
+  
+  unordered_nodes = defaultdict(list)
+  
+  for atom in repairs:
+    predicate, terms = parse_atom(atom)
+    if predicate == "regulator_activator":
+      function_dict["regulators"].append(f"regulates({terms[0]}, {compound}, 0).")
+    elif predicate == "regulator_inhibitor":
+      function_dict["regulators"].append(f"regulates({terms[0]}, {compound}, 1).")
+    elif predicate == "node_regulator":
+      node_id = int(terms[0])
+      unordered_nodes[node_id].append(terms[1])
+  function_dict["function"] = f"function({compound}, {len(unordered_nodes)})."
+  for i, regs in enumerate(sorted(unordered_nodes.items())):
+    for reg in regs[1]:
+      function_dict["terms"].append(f"term({compound}, {i+1}, {reg}).")
+  model_dict[compound] = function_dict
+  return function_dict
+
+def recover_timeouts(model, inconsistencies, revision_stats, to_recover, timeout_end, model_dict):
   time_left = timeout_end - time.monotonic()
   if time_left <= 0:
     logging.info(f"No time left, suboptimally repaired functions won't be recovered")
@@ -308,21 +375,22 @@ def recover_timeouts(model, inconsistencies, revision_stats, to_recover, timeout
     if func_state: # means there was an improvement
       criteria_costs = list(zip(min_change_criteria, costs))
       processFunctionRepairStats(func, func_state, criteria_costs, functions, repair_time, revision_stats)
-      logRepairedLP(func, functions, criteria_costs, to_stdout=not benchmark_enabled, logger=func_logger)
+      function_dict = repair_model_dict(model_dict, func, functions, func_state)
+      logRepairedLP(func, format_function_dict(func, function_dict), criteria_costs, to_stdout=not benchmark_enabled, logger=func_logger)
     else: revision_stats[func][BCHMARK_COMPOUND_REPAIR_TIME] = repair_time
     time_left = timeout_end - time.monotonic()
   if len(to_recover) == 0:
     logging.info("Recovery successful for all functions")
   else: logging.warning("Run out of time, no further recovery attempts will be made")
   return [x[0] for x in to_recover]
-
+  
 #Inputs: 
 # -model - the model being repaired
 # -inconsistencies - the inconsistencies obtained from consistency checking
 # -revision_stats - the map containing the changes done to each repaired
 # function
 #Purpose: attempts to repair the model and returns its final state
-def repair(model, inconsistencies, revision_stats): 
+def repair(model, inconsistencies, revision_stats, model_dict): 
   incst_funcs = generateInconsistentFunctions(model, inconsistencies)
   i_f_array = processInconsistentFunctions(incst_funcs)
   final_state = "repaired"
@@ -375,15 +443,16 @@ def repair(model, inconsistencies, revision_stats):
       criteria_costs = list(zip(min_change_criteria, costs))
         
       processFunctionRepairStats(func, func_state, criteria_costs, functions, repair_time, revision_stats)
-
-      logRepairedLP(func, functions, criteria_costs, to_stdout=not benchmark_enabled, logger=func_logger)
+      if functions:
+        function_dict = repair_model_dict(model_dict, func, functions, func_state)
+        logRepairedLP(func, format_function_dict(func, function_dict), criteria_costs, to_stdout=not benchmark_enabled, logger=func_logger)
       if not benchmark_enabled: printFuncRepairEnd(func)
       if SANITY_CHECKS:
         func_logger.info("Counting repairs to confirm ASP optimization counts. You can disable this by setting SANITY_CHECKS to False")
         repair_count_sanity_check(func, model, functions, criteria_costs, func_logger)
   if to_recover:
     if not benchmark_enabled: print("Now going back to recover timed out repairs")
-    suboptimal_repairs = recover_timeouts(model, inconsistencies, revision_stats, to_recover, timeout_end)
+    suboptimal_repairs = recover_timeouts(model, inconsistencies, revision_stats, to_recover, timeout_end, model_dict)
   else:
     suboptimal_repairs = []
   if timed_out_functions and unrepairable_functions:
@@ -417,6 +486,8 @@ def main():
   if not benchmark_enabled: print("Currently revising model ", model[1])
   global_logger.info(f"Currently revising model {model[1]}")
 
+  model_dict = model_to_dict(model[0])
+  
   consistency_start_time = time.monotonic()
   inconsistencies = checkConsistency(model[0], obsv_path)
   consistency_end_time = time.monotonic()
@@ -432,7 +503,7 @@ def main():
 
     # Third, if it is not, proceed with the repairs and print out the necessary ones.
     repair_start_time = time.monotonic()
-    final_state = repair(model[0], inconsistencies, model_revision_stats)
+    final_state = repair(model[0], inconsistencies, model_revision_stats, model_dict)
     repair_end_time = time.monotonic()
 
     total_repair_time = repair_end_time - repair_start_time
@@ -444,7 +515,12 @@ def main():
 
   revision_end_time = time.monotonic()
   total_revision_time = revision_end_time - revision_start_time
-  global_logger.info(f"Revision finished in {total_revision_time}s - Final state: {final_state}")
+  resulting_model = format_model_dict(model_dict)
+  global_logger.info(f"Revision finished in {total_revision_time}s - Final state: {final_state} - Resulting model:\n{resulting_model}")
+  if SANITY_CHECKS and 'repaired' in final_state:
+    inconsistencies = checkConsistency(resulting_model, obsv_path)
+    if inconsistencies:
+      raise Exception(f"State {final_state} is wrong: {len(inconsistencies)} inconsistencies found in new repaired model.")
 
   if benchmark_enabled:
     outputBenchmarkArray(model[1], final_state,

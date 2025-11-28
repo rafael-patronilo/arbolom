@@ -109,3 +109,15 @@ def clingo_logger(logger : logging.Logger, optional_predicates : list[tuple[str,
     except Exception as e: 
         logger.exception(f"Unexpected message format caused a {e} exception\nClingo message {code}\n{msg}")
   return log_clingo_message
+
+def parse_atom(atom : str) -> tuple[str, list[str]] | tuple[None, None]:
+  atom = atom.strip()
+  if atom.startswith("%"): return None, None
+  try:
+    predicate, terms = atom.split('(')
+    predicate = predicate.strip()
+    terms = [t.strip() for t in terms.split(')')[0].split(',')]
+    return predicate, terms
+  except Exception:
+    return None, None
+  
