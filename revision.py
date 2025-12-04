@@ -376,6 +376,8 @@ def recover_timeouts(model, inconsistencies, revision_stats, to_recover, timeout
       criteria_costs = list(zip(min_change_criteria, costs))
       processFunctionRepairStats(func, func_state, criteria_costs, functions, repair_time, revision_stats)
       function_dict = repair_model_dict(model_dict, func, functions, func_state)
+      if len(function_dict["terms"]) == 0: func_logger.warning("Unexpected empty term list (Empty functions are considered a mistake)")
+      if len(function_dict["regulators"]) == 0: func_logger.warning("Unexpected empty regulator list (Empty functions are considered a mistake)")
       logRepairedLP(func, format_function_dict(func, function_dict), criteria_costs, to_stdout=not benchmark_enabled, logger=func_logger)
     else: revision_stats[func][BCHMARK_COMPOUND_REPAIR_TIME] = repair_time
     time_left = timeout_end - time.monotonic()
@@ -445,6 +447,8 @@ def repair(model, inconsistencies, revision_stats, model_dict):
       processFunctionRepairStats(func, func_state, criteria_costs, functions, repair_time, revision_stats)
       if functions:
         function_dict = repair_model_dict(model_dict, func, functions, func_state)
+        if len(function_dict["terms"]) == 0: func_logger.warning("Unexpected empty term list (Empty functions are considered a mistake)")
+        if len(function_dict["regulators"]) == 0: func_logger.warning("Unexpected empty regulator list (Empty functions are considered a mistake)")
         logRepairedLP(func, format_function_dict(func, function_dict), criteria_costs, to_stdout=not benchmark_enabled, logger=func_logger)
       if not benchmark_enabled: printFuncRepairEnd(func)
       if SANITY_CHECKS:
