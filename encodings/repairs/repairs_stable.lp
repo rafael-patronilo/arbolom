@@ -81,6 +81,9 @@ experiment_positive_node(E,N) :- not experiment_negative_node(E,N), node_ID(N), 
 :- node_ID(N2), available_node_ID(N1), N2 > N1, not node_ID(N1), function(compound, TERM_NO), 
           N2 > TERM_NO.
 
+% 7 - There must be at least one node.
+:- not node_ID(_).
+
 %Display
 regulator_activator(C) :- node_regulator(N,C), activator(C).
 regulator_inhibitor(C) :- node_regulator(N,C), inhibitor(C).
