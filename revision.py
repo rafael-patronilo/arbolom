@@ -451,7 +451,7 @@ def repair(model, inconsistencies, revision_stats, model_dict):
         if len(function_dict["regulators"]) == 0: func_logger.warning("Unexpected empty regulator list (Empty functions are considered a mistake)")
         logRepairedLP(func, format_function_dict(func, function_dict), criteria_costs, to_stdout=not benchmark_enabled, logger=func_logger)
       if not benchmark_enabled: printFuncRepairEnd(func)
-      if SANITY_CHECKS:
+      if SANITY_CHECKS and functions:
         func_logger.info("Counting repairs to confirm ASP optimization counts. You can disable this by setting SANITY_CHECKS to False")
         repair_count_sanity_check(func, model, functions, criteria_costs, func_logger)
   if to_recover:
