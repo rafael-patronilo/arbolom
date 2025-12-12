@@ -41,11 +41,11 @@ CRITERIA = {
 
 
     "sign-to-inhibitor" : RepairCriterion(
-        "#minimize{{1@{p}, C : regulates(C,compound,0), inhibitor(C)}}.",
+        "#minimize{{1@{p}, C : regulates(C,compound,0), inhibitor(C), node_regulator(_, C)}}.",
         "Optimize for the minimum number of activators changed to inhibitors."
     ),
     "sign-to-activator" : RepairCriterion(
-        "#minimize{{1@{p}, C : regulates(C,compound,1), activator(C)}}.",
+        "#minimize{{1@{p}, C : regulates(C,compound,1), activator(C), node_regulator(_, C)}}.",
         "Optimize for the minimum number of inhibitors changed to activators."
     ),
 
