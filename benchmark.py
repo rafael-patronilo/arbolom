@@ -8,6 +8,8 @@ from aux_scripts.repair_prints import *
 from aux_scripts.repair_criteria import CRITERIA, print_criteria
 import shutil
 import sys
+from io import Writer
+from contextlib import contextmanager
 
 #Usage: $python benchmark.py -f (CONFIG_FOLDER) -o (OBSERVATION_FOLDER) -m (MODEL_NAME) -s (SAVE_FOLDER) -stable -sync -async
 #Optional flags:
@@ -215,10 +217,33 @@ def error_row(model_path, error_type):
           ",".join(["NaN" for _ in min_change_criteria]) + "\n"
   )
 
+@contextmanager
+def deffered_output_file(path, resume_mode : bool, header_line : str) -> Writer[str]:
+  if not resume_mode and os.path.exists(path):
+    raise FileExistsError(f"{path} unexpectedly already exists. "
+                          "Please delete first or use --skip to enable resuming from a snapshot file")
+  file = None
+  class DefferedOutputFile:
+    def write(self, data : str):
+      nonlocal file
+      if not file:
+        if resume_mode and os.path.exists(path):
+          global_logger.warning(f"File {path} already exists, opening in append mode")
+          file = open(path, "a")
+        else:
+          file = open(path, "x")
+          file.write(header_line)
+          global_logger.debug(f"File {path} created")
+      file.write(data)
+  try: yield DefferedOutputFile()
+  finally:
+    if file: file.close()
+
 def main():
   global global_logger
   global toggle_stable_state, toggle_sync, toggle_async
   global min_change_criteria, skip_n_first
+  skip_mode = skip_n_first != 0
   parseArgs()
 
   interaction_mode = None
@@ -235,6 +260,7 @@ def main():
     BCHMARK_COMPOUND_REPAIR_TIME,
     *min_change_criteria
   )
+  header_line = ",".join(benchmark_header) + "\n"
 
   configs_list = getConfigsList()
   obsv_list = getObsvList()
@@ -257,8 +283,8 @@ def main():
       current_config_directory = config
       model_paths = get_models(current_config_directory)
       save_filename = benchmark_filename(current_config_directory, obsv, snapshot=True)
-      with open(save_filename, "w") as save_file:
-        save_file.write(",".join(benchmark_header) + "\n")
+      
+      with deffered_output_file(save_filename, skip_mode, header_line) as save_file:
         for model_index, model_path in enumerate(model_paths):
           test_id = (f"Test {test_number} - "
             f"Obsv({current_obs_number}/{len(obsv_list)}) || "
@@ -291,8 +317,14 @@ def main():
           global_logger.info(f"Current progress: {test_id}")
           test_number += 1
       final_filename = benchmark_filename(current_config_directory, obsv, snapshot=False)
-      shutil.move(save_filename, final_filename)
-      global_logger.info(f"Saved config results to {final_filename}")
+      if not os.path.exists(save_filename):
+        assert skip_mode
+        global_logger.info("All tests skipped for current config")
+      elif os.path.exists(final_filename):
+        raise FileExistsError(f"Cannot overwrite {final_filename}, results kept as {save_filename}")
+      else:
+        shutil.move(save_filename, final_filename)
+        global_logger.info(f"Saved config results to {final_filename}")
     current_config_number = 0
     
   global_logger.info("Done!")
