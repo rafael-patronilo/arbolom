@@ -8,7 +8,6 @@ from aux_scripts.repair_prints import *
 from aux_scripts.repair_criteria import CRITERIA, print_criteria
 import shutil
 import sys
-from io import Writer
 from contextlib import contextmanager
 
 #Usage: $python benchmark.py -f (CONFIG_FOLDER) -o (OBSERVATION_FOLDER) -m (MODEL_NAME) -s (SAVE_FOLDER) -stable -sync -async
@@ -218,7 +217,7 @@ def error_row(model_path, error_type):
   )
 
 @contextmanager
-def deffered_output_file(path, resume_mode : bool, header_line : str) -> Writer[str]:
+def deffered_output_file(path, resume_mode : bool, header_line : str):
   if not resume_mode and os.path.exists(path):
     raise FileExistsError(f"{path} unexpectedly already exists. "
                           "Please delete first or use --skip to enable resuming from a snapshot file")
@@ -243,8 +242,8 @@ def main():
   global global_logger
   global toggle_stable_state, toggle_sync, toggle_async
   global min_change_criteria, skip_n_first
-  skip_mode = skip_n_first != 0
   parseArgs()
+  skip_mode = (skip_n_first != 0)
 
   interaction_mode = None
   if toggle_stable_state: interaction_mode = "stable"
@@ -294,6 +293,7 @@ def main():
           if skip_n_first > 0:
             skip_n_first -= 1
             global_logger.info(f"Skipping: {test_id}")
+            test_number += 1
             continue
           result = subprocess.run(['python', 'revision.py',
             '-f', model_path,
