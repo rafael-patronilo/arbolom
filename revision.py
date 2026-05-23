@@ -52,6 +52,7 @@ toggle_async = False
 parallel_mode = None
 
 min_change_criteria = ["term-number", "regulators", "signs", "term-format"]
+disable_change_criteria = []
 
 #Parser
 parser = None
@@ -90,6 +91,8 @@ def parseArgs():
                       "The value 'auto' will choose the number of threads based on the number of available CPU cores.")
   parser.add_argument("-criteria", "--criteria", default="term-number,regulators,signs,term-format",
                       help="Comma separated list of the criteria to use to minimize changes, in order of priority. For the list of available criteria use --help-criteria. Default is %(default)s.")
+  parser.add_argument("-disable-criteria", "--disable-criteria", default="",
+                      help="Comma separated list of the criteria to disable. For the list of available criteria use --help-criteria. Default is %(default)s.")
   parser.add_argument("-help-criteria", "--help-criteria", action='store_true', help="Prints the available criteria to the console and exits.")
   args = parser.parse_args()
 
@@ -101,7 +104,7 @@ def parseArgs():
   global model_path, obsv_path, benchmakr_write_folder
   global toggle_stable_state, toggle_sync, toggle_async
   global benchmark_enabled, parallel_mode
-  global min_change_criteria
+  global min_change_criteria, disable_change_criteria
 
   model_path = args.model_to_repair
   obsv_path = args.observations
@@ -118,6 +121,12 @@ def parseArgs():
     for x in custom_criteria:
       assert x in CRITERIA, f"Invalid criterion specified: {x}. Use --help-criteria to see available criteria."
     min_change_criteria = custom_criteria
+
+  if args.disable_criteria:
+    custom_disable_criteria = args.disable_criteria.split(',')
+    for x in custom_disable_criteria:
+      assert x in CRITERIA, f"Invalid criterion specified: {x}. Use --help-criteria to see available criteria."
+    disable_change_criteria = custom_disable_criteria
 
   if args.parallel_mode:
     if args.parallel_mode == "auto":
@@ -417,7 +426,9 @@ def repair(model, inconsistencies, revision_stats, model_dict):
       upo= processPreviousObservations(prev_obs, logger = func_logger)
       
       compound_repair_start = time.monotonic()
-      result, functions, costs = generateFunctions(func, model, inconsistencies, upo, min_change_criteria, (soft_timeout, hard_timeout),
+      result, functions, costs = generateFunctions(
+        func, model, inconsistencies, 
+        upo, min_change_criteria, disable_change_criteria, (soft_timeout, hard_timeout),
         toggle_stable_state, toggle_sync, toggle_async, parallel_mode=parallel_mode, logger = func_logger)
       compound_repair_end = time.monotonic()
       repair_time = compound_repair_end - compound_repair_start

@@ -1,6 +1,6 @@
 import math
 import time, clingo
-from aux_scripts.repair_criteria import build_asp_change_criteria
+from aux_scripts.repair_criteria import build_asp_change_criteria, build_asp_disable_constraints
 from aux_scripts.repair_prints import printStatistics
 from aux_scripts import deepening_search
 from aux_scripts.common import clingo_logger
@@ -71,16 +71,18 @@ def generateInconsistentFunctions(model, inconsistencies, debug_mode=False, path
 # path_mode - flag that enables loading the model and inconsistencies from a file, instead of a string
 # enable_prints - enables additional prints
 #Purpose: Generates a function that is compatible with previously given observations, based on the obtained inconsistencies
-def generateFunctions(func, model, incst, upo, min_change_criteria, repair_timeout,
-                      toggle_stable_state, toggle_sync, toggle_async, 
-                      parallel_mode=None, path_mode = False, logger=None, cost_bounds = None):
+def generateFunctions(
+    func, model, incst, upo, min_change_criteria, disable_change_criteria,
+    repair_timeout,
+    toggle_stable_state, toggle_sync, toggle_async, 
+    parallel_mode=None, path_mode = False, logger=None, cost_bounds = None):
   if logger: logger.debug("Calculating repairs...")
 
   if min_change_criteria[0] == 'term-number':
     if logger: logger.info("Switching to former version to take advantage of deepening search")
     return deepening_search.generateFunctions(
       repair_timeout, func, model, incst, upo, toggle_stable_state, toggle_sync, toggle_async, 
-      min_change_criteria[1:], path_mode, logger)
+      min_change_criteria[1:], disable_change_criteria, path_mode, logger)
   function = []
   upo_program = ""
   if upo : upo_program = upo[0]
@@ -90,11 +92,13 @@ def generateFunctions(func, model, incst, upo, min_change_criteria, repair_timeo
     logger.debug(f"Trying to find a solution with at most ({max_node_limit}) nodes...")
     if math.isinf(max_node_limit): logger.error("Node limit is infinite")
   
-  optimal, function, costs = generateFunctionsClingo(max_node_limit, repair_timeout, func,
-                                    model, incst, upo_program, min_change_criteria,
-                                    toggle_stable_state, toggle_sync, toggle_async, 
-                                    parallel_mode, path_mode, logger,
-                                    cost_bounds=cost_bounds)
+  optimal, function, costs = generateFunctionsClingo(
+    max_node_limit, repair_timeout, func,
+    model, incst, upo_program, min_change_criteria, disable_change_criteria,
+    toggle_stable_state, toggle_sync, toggle_async, 
+    parallel_mode, path_mode, logger,
+    cost_bounds=cost_bounds
+  )
   if not optimal: 
     if logger: logger.warning(f"Search timed out. If a solution was found, it will be suboptimal.")
     result = "timeout"
@@ -124,7 +128,7 @@ def generateFunctions(func, model, incst, upo, min_change_criteria, repair_timeo
 #Purpose: Calls clingo to solve the repair encoding
 def generateFunctionsClingo(node_number,
                              repair_timeout, func, model,
-                             incst, upo_program, min_change_criteria,
+                             incst, upo_program, min_change_criteria, disable_change_criteria,
                              toggle_stable_state, toggle_sync, toggle_async, 
                              parallel_mode=None,
                              path_mode = False, logger=None,
@@ -164,6 +168,8 @@ def generateFunctionsClingo(node_number,
   asp_min_criteria = build_asp_change_criteria(min_change_criteria, toggle_stable_state, toggle_sync, toggle_async)
   if logger: logger.debug(f"Change minimization criteria:\n{asp_min_criteria}")
   ctl.add("base", [], program=asp_min_criteria)
+  asp_disable_changes = build_asp_disable_constraints(disable_change_criteria)
+  ctl.add("base", [], program=asp_disable_changes)
 
   ctl.ground([("base", [])])
   function = []

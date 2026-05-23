@@ -1,6 +1,6 @@
 import time, clingo
 from aux_scripts.repair_prints import printStatistics
-from aux_scripts.repair_criteria import build_asp_change_criteria
+from aux_scripts.repair_criteria import build_asp_change_criteria, build_asp_disable_constraints
 
 #Path of the encodings to obtain inconsistent functions
 inconsistent_functions_path = "encodings/repairs/auxiliary/inconsistent_functions.lp"
@@ -60,7 +60,10 @@ def generateInconsistentFunctions(model, inconsistencies, debug_mode=False, path
 # path_mode - flag that enables loading the model and inconsistencies from a file, instead of a string
 # enable_prints - enables additional prints
 #Purpose: Generates a function that is compatible with previously given observations, based on the obtained inconsistencies
-def generateFunctions(repair_timeout, func, model, incst, upo, toggle_stable_state, toggle_sync, toggle_async, min_change_criteria, path_mode = False, logger=None):
+def generateFunctions(
+    repair_timeout, func, model, incst, upo, 
+    toggle_stable_state, toggle_sync, toggle_async, 
+    min_change_criteria, disable_change_criteria, path_mode = False, logger=None):
   if logger:
     logger.warning("Some changes are still being ported to this version. ")
     logger.debug("Calculating repairs...")
@@ -88,7 +91,7 @@ def generateFunctions(repair_timeout, func, model, incst, upo, toggle_stable_sta
       timed_out, function = generateFunctionsClingo(node_number, repair_timeout - (time.monotonic() - timeout_start), 
                                         func, model, incst,
                                         upo_program, toggle_stable_state, toggle_sync, 
-                                        toggle_async, min_change_criteria, path_mode, logger)
+                                        toggle_async, min_change_criteria, disable_change_criteria, path_mode, logger)
       if timed_out: return make_return_tuple('timeout', function, 0)
           
     else:
@@ -99,7 +102,7 @@ def generateFunctions(repair_timeout, func, model, incst, upo, toggle_stable_sta
         timed_out, function_above = generateFunctionsClingo(high_node_number, repair_timeout - (time.monotonic() - timeout_start),
                                                 func, model, incst, 
                                                 upo_program, toggle_stable_state, toggle_sync, 
-                                                toggle_async, min_change_criteria, path_mode, logger)
+                                                toggle_async, min_change_criteria, disable_change_criteria, path_mode, logger)
         if timed_out: return make_return_tuple('timeout', function_above, current_variation)
       
       low_node_number = starting_node_number - current_variation
@@ -109,7 +112,7 @@ def generateFunctions(repair_timeout, func, model, incst, upo, toggle_stable_sta
         timed_out, function_below = generateFunctionsClingo(low_node_number, repair_timeout - (time.monotonic() - timeout_start),
                                                 func, model, incst, 
                                                 upo_program, toggle_stable_state, toggle_sync, 
-                                                toggle_async, min_change_criteria, path_mode, logger)
+                                                toggle_async, min_change_criteria, disable_change_criteria, path_mode, logger)
 
       function, final_variation = compareAndGetBestFunction(function_above, function_below, current_variation)
 
@@ -155,7 +158,12 @@ def compareAndGetBestFunction(function_above, function_below, variation):
 # path_mode - flag that enables loading the model and inconsistencies from a file, instead of a string
 # enable_prints - enables additional prints
 #Purpose: Calls clingo to solve the repair encoding
-def generateFunctionsClingo(node_number, repair_timeout, func, model, incst, upo_program, toggle_stable_state, toggle_sync, toggle_async, min_change_criteria, path_mode = False, logger=None):
+def generateFunctionsClingo(
+    node_number, repair_timeout, func, model, incst, 
+    upo_program, 
+    toggle_stable_state, toggle_sync, toggle_async,
+    min_change_criteria, disable_change_criteria, 
+    path_mode = False, logger=None):
   no_timeout = True
   clingo_args = ["0", f"-c compound={func}", f"-c node_number={node_number}"]
       
@@ -179,6 +187,8 @@ def generateFunctionsClingo(node_number, repair_timeout, func, model, incst, upo
 
   asp_min_criteria = build_asp_change_criteria(min_change_criteria, toggle_stable_state, toggle_sync, toggle_async)
   ctl.add("base", [], program=asp_min_criteria)
+  asp_disable_changes = build_asp_disable_constraints(disable_change_criteria)
+  ctl.add("base", [], program=asp_disable_changes)
 
   ctl.ground([("base", [])])
   function = []
