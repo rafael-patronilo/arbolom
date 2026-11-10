@@ -56,13 +56,23 @@ def _inconsistent_atoms(incst):
 
 def test_stable_consistent_model(write_obs):
     model = bnet_to_lp("a, a\nb, b\nf, a & b\n")
-    obs = stable_obs([{"a": x, "b": y, "f": x & y} for x, y in itertools.product((0, 1), repeat=2)])
+    raw_obs = [{"a": x, "b": y, "f": x & y} for x, y in itertools.product((0, 1), repeat=2)]
+    assert raw_obs == [ # expanded literal result, here for readability
+        {'a': 0, 'b': 0, 'f': 0},
+        {'a': 0, 'b': 1, 'f': 0},
+        {'a': 1, 'b': 0, 'f': 0},
+        {'a': 1, 'b': 1, 'f': 1}
+    ]
+    obs = stable_obs(raw_obs)
     assert find_inconsistencies(model, write_obs(obs), "stable") is None
 
 
 def test_stable_detects_inconsistency(write_obs):
     model = bnet_to_lp("a, a\nb, b\nf, a & b\n")
-    obs = stable_obs([{"a": 1, "b": 0, "f": 1}, {"a": 1, "b": 1, "f": 1}])
+    obs = stable_obs([
+        {"a": 1, "b": 0, "f": 1}, 
+        {"a": 1, "b": 1, "f": 1}
+    ])
     incst = find_inconsistencies(model, write_obs(obs), "stable")
     assert _inconsistent_atoms(incst) == ["inconsistent(1,f,0)."]
 

@@ -31,7 +31,17 @@ def test_sync_repair_same_number_of_terms(write_obs, criteria):
     # true f(t+1) = a & !b ; corrupted model has f = a & b
     model = bnet_to_lp("a, a\nb, b\nf, a & b\n")
     pairs = [({"a": a, "b": b, "f": f0}, {"a": a, "b": b, "f": a & (1 - b)})
-             for a, b, f0 in itertools.product((0, 1), repeat=3)]
+              for a, b, f0 in itertools.product((0, 1), repeat=3)]
+    assert pairs == [ # expanded literal result, here for readability
+        ({'a': 0, 'b': 0, 'f': 0}, {'a': 0, 'b': 0, 'f': 0}),
+        ({'a': 0, 'b': 0, 'f': 1}, {'a': 0, 'b': 0, 'f': 0}),
+        ({'a': 0, 'b': 1, 'f': 0}, {'a': 0, 'b': 1, 'f': 0}),
+        ({'a': 0, 'b': 1, 'f': 1}, {'a': 0, 'b': 1, 'f': 0}),
+        ({'a': 1, 'b': 0, 'f': 0}, {'a': 1, 'b': 0, 'f': 1}),
+        ({'a': 1, 'b': 0, 'f': 1}, {'a': 1, 'b': 0, 'f': 1}),
+        ({'a': 1, 'b': 1, 'f': 0}, {'a': 1, 'b': 1, 'f': 0}),
+        ({'a': 1, 'b': 1, 'f': 1}, {'a': 1, 'b': 1, 'f': 0})
+        ]
     obs_path = write_obs(_sync_two_step(pairs))
     incst = find_inconsistencies(model, obs_path, "sync")
     assert inconsistent_functions(model, incst) == ["f"]
@@ -48,6 +58,16 @@ def test_sync_repair_adding_a_term(write_obs):
     model = bnet_to_lp("a, a\nb, b\nf, a & b\n")
     pairs = [({"a": a, "b": b, "f": f0}, {"a": a, "b": b, "f": a | b})
              for a, b, f0 in itertools.product((0, 1), repeat=3)]
+    assert pairs == [ # expanded literal result, here for readability
+        ({'a': 0, 'b': 0, 'f': 0}, {'a': 0, 'b': 0, 'f': 0}),
+        ({'a': 0, 'b': 0, 'f': 1}, {'a': 0, 'b': 0, 'f': 0}),
+        ({'a': 0, 'b': 1, 'f': 0}, {'a': 0, 'b': 1, 'f': 1}),
+        ({'a': 0, 'b': 1, 'f': 1}, {'a': 0, 'b': 1, 'f': 1}),
+        ({'a': 1, 'b': 0, 'f': 0}, {'a': 1, 'b': 0, 'f': 1}),
+        ({'a': 1, 'b': 0, 'f': 1}, {'a': 1, 'b': 0, 'f': 1}),
+        ({'a': 1, 'b': 1, 'f': 0}, {'a': 1, 'b': 1, 'f': 1}),
+        ({'a': 1, 'b': 1, 'f': 1}, {'a': 1, 'b': 1, 'f': 1})
+    ]
     obs_path = write_obs(_sync_two_step(pairs))
     incst = find_inconsistencies(model, obs_path, "sync")
 
@@ -71,6 +91,16 @@ def test_deepening_search_term_number_cost_when_removing_a_term(write_obs):
     model = bnet_to_lp("a, a\nb, b\nf, a | b\n")
     pairs = [({"a": a, "b": b, "f": f0}, {"a": a, "b": b, "f": a})
              for a, b, f0 in itertools.product((0, 1), repeat=3)]
+    assert pairs == [ # expanded literal result, here for readability
+        ({'a': 0, 'b': 0, 'f': 0}, {'a': 0, 'b': 0, 'f': 0}),
+        ({'a': 0, 'b': 0, 'f': 1}, {'a': 0, 'b': 0, 'f': 0}),
+        ({'a': 0, 'b': 1, 'f': 0}, {'a': 0, 'b': 1, 'f': 0}),
+        ({'a': 0, 'b': 1, 'f': 1}, {'a': 0, 'b': 1, 'f': 0}),
+        ({'a': 1, 'b': 0, 'f': 0}, {'a': 1, 'b': 0, 'f': 1}),
+        ({'a': 1, 'b': 0, 'f': 1}, {'a': 1, 'b': 0, 'f': 1}),
+        ({'a': 1, 'b': 1, 'f': 0}, {'a': 1, 'b': 1, 'f': 1}),
+        ({'a': 1, 'b': 1, 'f': 1}, {'a': 1, 'b': 1, 'f': 1})
+    ]
     obs_path = write_obs(_sync_two_step(pairs))
     incst = find_inconsistencies(model, obs_path, "sync")
 
@@ -90,8 +120,14 @@ def test_stable_state_repair_can_add_terms(write_obs, criteria):
     # true f = a | b ; corrupted model has f = a & b. "extra-regulators" is disabled so
     # the degenerate self-loop repair f = f (see test below) is not available.
     model = bnet_to_lp("a, a\nb, b\nf, a & b\n")
-    obs_path = write_obs(stable_obs([{"a": a, "b": b, "f": a | b}
-                                     for a, b in itertools.product((0, 1), repeat=2)]))
+    raw_obs = [{"a": a, "b": b, "f": a | b} for a, b in itertools.product((0, 1), repeat=2)]
+    assert raw_obs == [ # expanded literal result, here for readability
+        {'a': 0, 'b': 0, 'f': 0},
+        {'a': 0, 'b': 1, 'f': 1},
+        {'a': 1, 'b': 0, 'f': 1},
+        {'a': 1, 'b': 1, 'f': 1}
+    ]
+    obs_path = write_obs(stable_obs(raw_obs))
     incst = find_inconsistencies(model, obs_path, "stable")
     assert inconsistent_functions(model, incst) == ["f"]
 
@@ -107,6 +143,16 @@ def test_parallel_mode_reaches_clingo_with_default_criteria(write_obs, monkeypat
     model = bnet_to_lp("a, a\nb, b\nf, a & b\n")
     pairs = [({"a": a, "b": b, "f": f0}, {"a": a, "b": b, "f": a | b})
              for a, b, f0 in itertools.product((0, 1), repeat=3)]
+    assert pairs == [ # expanded literal result, here for readability
+        ({'a': 0, 'b': 0, 'f': 0}, {'a': 0, 'b': 0, 'f': 0}),
+        ({'a': 0, 'b': 0, 'f': 1}, {'a': 0, 'b': 0, 'f': 0}),
+        ({'a': 0, 'b': 1, 'f': 0}, {'a': 0, 'b': 1, 'f': 1}),
+        ({'a': 0, 'b': 1, 'f': 1}, {'a': 0, 'b': 1, 'f': 1}),
+        ({'a': 1, 'b': 0, 'f': 0}, {'a': 1, 'b': 0, 'f': 1}),
+        ({'a': 1, 'b': 0, 'f': 1}, {'a': 1, 'b': 0, 'f': 1}),
+        ({'a': 1, 'b': 1, 'f': 0}, {'a': 1, 'b': 1, 'f': 1}),
+        ({'a': 1, 'b': 1, 'f': 1}, {'a': 1, 'b': 1, 'f': 1})
+    ]
     incst = find_inconsistencies(model, write_obs(_sync_two_step(pairs)), "sync")
 
     real_control = clingo.Control
@@ -129,6 +175,16 @@ def test_parallel_mode_reaches_clingo_with_non_deepening_criteria(write_obs, mon
     model = bnet_to_lp("a, a\nb, b\nf, a & b\n")
     pairs = [({"a": a, "b": b, "f": f0}, {"a": a, "b": b, "f": a | b})
              for a, b, f0 in itertools.product((0, 1), repeat=3)]
+    assert pairs == [ # expanded literal result, here for readability
+        ({'a': 0, 'b': 0, 'f': 0}, {'a': 0, 'b': 0, 'f': 0}),
+        ({'a': 0, 'b': 0, 'f': 1}, {'a': 0, 'b': 0, 'f': 0}),
+        ({'a': 0, 'b': 1, 'f': 0}, {'a': 0, 'b': 1, 'f': 1}),
+        ({'a': 0, 'b': 1, 'f': 1}, {'a': 0, 'b': 1, 'f': 1}),
+        ({'a': 1, 'b': 0, 'f': 0}, {'a': 1, 'b': 0, 'f': 1}),
+        ({'a': 1, 'b': 0, 'f': 1}, {'a': 1, 'b': 0, 'f': 1}),
+        ({'a': 1, 'b': 1, 'f': 0}, {'a': 1, 'b': 1, 'f': 1}),
+        ({'a': 1, 'b': 1, 'f': 1}, {'a': 1, 'b': 1, 'f': 1})
+    ]
     incst = find_inconsistencies(model, write_obs(_sync_two_step(pairs)), "sync")
 
     real_control = clingo.Control
