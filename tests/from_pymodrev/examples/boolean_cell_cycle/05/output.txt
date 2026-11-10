@@ -1,0 +1,1 @@
+cdc20@E,cycb,cdc20/p27@F,(cyca && !cycb && cycd && !p27) || (!cycb && cycd && !cyce && !p27)

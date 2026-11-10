@@ -1,0 +1,1 @@
+p27@F,(cyca && !cycb && cycd && !cyce) || (!cycb && !cyce && p27) || (cyca && !cycb && cycd && p27)

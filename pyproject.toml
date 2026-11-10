@@ -1,19 +1,44 @@
 [project]
-name = "arbolom-tool"
+name = "arbolom"
 version = "0.1.0"
+description = "ASP-based Revision of Boolean Logical Models"
+readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "clingo>=5.8.3",
     "natsort>=8.4.0",
     "pandas>=3.1.1",
+    # Note: pymodrev is now a dependency to share the data model, for input and output under the common api. However, naturally the pymodrev implementation dependencies transition to arbolom. 
+
+    # Possible future work: Create a new separate python package for "boolean network revision api" defining the api standard and data model compatible with pymodrev, which will essentially copy their data model, excluding all implementation dependencies. 
+    "pymodrev>=0.5.8",
 ]
+
+[project.scripts]
+# pymodrev-compatible command line interface
+arbolom = "arbolom.cli:main"
+# ARBoLoM's original command line tools
+arbolom-revision = "arbolom.scripts.revision:main"
+arbolom-consistency = "arbolom.scripts.consistency_checking:main"
+arbolom-repair = "arbolom.scripts.repair:main"
+arbolom-conversion = "arbolom.scripts.conversion:main"
+arbolom-corruption = "arbolom.scripts.corruption:main"
+arbolom-gen-observations = "arbolom.scripts.gen_observations:main"
+arbolom-benchmark = "arbolom.scripts.benchmark:main"
+arbolom-summarize-benchmark = "arbolom.scripts.summarize_benchmark:main"
+arbolom-merge-csv = "arbolom.scripts.merge_csv:main"
+
+[build-system]
+requires = ["uv_build>=0.12.3,<0.13.0"]
+build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
     "pytest>=9.2.0",
+    # Needed by the tests imported from pymodrev (Excel observation parsers)
+    "openpyxl>=3.1",
+    "xlrd>=2.0",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Scripts import `aux_scripts.*` relative to the repository root.
-pythonpath = ["."]

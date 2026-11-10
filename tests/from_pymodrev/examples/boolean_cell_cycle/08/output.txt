@@ -1,0 +1,1 @@
+cyca@F,(!cdc20 && !cdh1 && rb && cyca && ubch10) || (!cdc20 && e2f && rb && cyca && ubch10) || (!cdc20 && !cdh1 && e2f && rb)

@@ -1,0 +1,10 @@
+cdc25@F,(cdc2_cdc13 && cdc25) || (cdc2_cdc13 && !pp)
++slp1@E,cdc2_cdc13_a,slp1
+cdc2_cdc13_a@F,(!ste9 && !rum1 && !slp1 && cdc25) || (!slp1 && !wee1_mik1 && cdc25);F,(!ste9 && !rum1 && !slp1 && !wee1_mik1) || (!slp1 && !wee1_mik1 && cdc25);F,(!slp1 && !wee1_mik1 && cdc25) || (!ste9 && !rum1 && !wee1_mik1 && cdc25)
+wee1_mik1@F,(!cdc2_cdc13) || (wee1_mik1 && pp)
++start@E,start,start
+rum1@F,(!cdc2_cdc13 && !cdc2_cdc13_a && rum1 && pp) || (!cdc2_cdc13 && !cdc2_cdc13_a && !sk && pp) || (!cdc2_cdc13_a && rum1 && !sk && pp) || (!cdc2_cdc13 && rum1 && !sk && pp)
++sk@E,start,sk
+cdc2_cdc13@F,(!slp1) || (!ste9 && !rum1)
++pp@E,slp1,pp
+ste9@F,(!cdc2_cdc13 && !cdc2_cdc13_a && ste9 && pp) || (!cdc2_cdc13 && !cdc2_cdc13_a && !sk && pp) || (!cdc2_cdc13_a && ste9 && !sk && pp) || (!cdc2_cdc13 && ste9 && !sk && pp)

@@ -1,0 +1,4 @@
+fissionYeastDavidich2008/original/fissionYeastDavidich2008.lp
+fissionYeastDavidich2008/original/attractors.lp
+
+bnet and dev does not work the same due to start being an input and having no regulatory function in lp file, and a self regulation in bnet or zginml file which leads to different repair operations!

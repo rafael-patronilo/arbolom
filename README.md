@@ -2,41 +2,94 @@
 The ARBoLoM tool aims to automate the revision of Boolean logical models, with fully Answer Set Programming-based consistency checking and repair algorithms. 
 
 ## Encoding Directories
-The encodings responsible for verifying the consistency of a model given [stable state](https://github.com/fpaleixo/arbolom/blob/main/encodings/consistency/ss_consistency.lp), [synchronous](https://github.com/fpaleixo/arbolom/blob/main/encodings/consistency/sync_consistency.lp), or [asynchronous observations](https://github.com/fpaleixo/arbolom/blob/main/encodings/consistency/async_consistency.lp), can be found [here](https://github.com/fpaleixo/arbolom/tree/main/encodings/consistency).
+The ASP encodings are shipped with the Python package, in [`src/arbolom/encodings`](src/arbolom/encodings).
 
-The encodings responsible for repairing a function using [stable state](https://github.com/fpaleixo/arbolom/blob/main/encodings/repairs/repairs_stable.lp), [synchronous](https://github.com/fpaleixo/arbolom/blob/main/encodings/repairs/repairs_sync.lp), or [asynchronous observations](https://github.com/fpaleixo/arbolom/blob/main/encodings/repairs/repairs_async.lp), can be found [here](https://github.com/fpaleixo/arbolom/tree/main/encodings/repairs).
+The encodings responsible for verifying the consistency of a model given [stable state](src/arbolom/encodings/consistency/ss_consistency.lp), [synchronous](src/arbolom/encodings/consistency/sync_consistency.lp), or [asynchronous observations](src/arbolom/encodings/consistency/async_consistency.lp), can be found [here](src/arbolom/encodings/consistency).
 
-## Installation (2 alternatives)
+The encodings responsible for repairing a function using [stable state](src/arbolom/encodings/repairs/repairs_stable.lp), [synchronous](src/arbolom/encodings/repairs/repairs_sync.lp), or [asynchronous observations](src/arbolom/encodings/repairs/repairs_async.lp), can be found [here](src/arbolom/encodings/repairs).
 
-### Using Google Colab
-All scripts can be tested with no installation by using Google Colab. Just download the repository and change the working directory to the arbolom folder.
+## Installation
+Python 3.13 or above is required. ARBoLoM is a Python package (`src/arbolom`) depending on [clingo](https://pypi.org/project/clingo/) and on [pymodrev](https://github.com/ptgm/pymodrev), whose data model it shares.
 
-### Using a local installation
-For a local installation, Python 3.13 or above is required, alongside the [clingo package](https://pypi.org/project/clingo/). Detailed instructions can be found in the [potassco website](https://potassco.org/clingo/).
+- With [uv](https://docs.astral.sh/uv/): `uv sync` installs the package and its dependencies in `.venv`; prefix commands with `uv run` (e.g. `uv run arbolom-revision ...`) or activate the environment.
+- With pip: `pip install .`
+- With Google Colab: see the [notebook](ARBoLoM.ipynb), which installs the package with pip.
 
-With [uv](https://docs.astral.sh/uv/), `uv sync` installs all dependencies and `uv run pytest` runs the test suite.
+`uv run pytest` runs the test suite. The tests in [`tests/from_pymodrev`](tests/from_pymodrev) come from pymodrev and check the compatibility of ARBoLoM's API and command line interface with pymodrev's.
 
-## Running the Scripts
+## Package Layout
+| Module | Contents |
+|---|---|
+| `arbolom.api`, `arbolom.cli` | pymodrev-compatible API and command line interface |
+| `arbolom.engine`, `arbolom.bridge`, `arbolom.formats` | ARBoLoM's revision applied to pymodrev's data model; translation to and from ARBoLoM's LP format |
+| `arbolom.revision` | `RevisionSettings` and `ModelReviser`: consistency checking followed by the repair of each inconsistent function |
+| `arbolom.consistency` | consistency checking |
+| `arbolom.repair` | repair of a single function (`search`, `deepening_search`), its preprocessing, change minimization criteria and sanity checks |
+| `arbolom.conversion`, `arbolom.lp_model` | .bnet to LP conversion; manipulation of LP models |
+| `arbolom.corruption`, `arbolom.observation_generation` | model corruption and observation generation, used to build benchmarks |
+| `arbolom.modes` | `UpdateMode` (stable, sync, async) |
+| `arbolom.scripts` | ARBoLoM's original command line tools |
 
-Instructions and examples on how to run each script can be found in the [notebook](https://github.com/fpaleixo/arbolom/blob/main/ARBoLoM.ipynb) file.
+## Running the Tools
+The command line tools are installed as commands (each also runs with `python -m arbolom.scripts.<module>`):
+
+| Command | Former script | Purpose |
+|---|---|---|
+| `arbolom-revision` | `revision.py` | Check the consistency of a model and repair it |
+| `arbolom-consistency` | `consistency_checking.py` | Check the consistency of a model, saving the inconsistencies |
+| `arbolom-repair` | `repair.py` | Repair a model given the inconsistencies saved by `arbolom-consistency` |
+| `arbolom-conversion` | `conversion.py` | Convert .bnet models to .lp |
+| `arbolom-corruption` | `corruption.py` | Corrupt .bnet models (`-seed` makes it reproducible) |
+| `arbolom-gen-observations` | `gen_observations.py` | Generate time-series observations from a .lp model |
+| `arbolom-benchmark` | `benchmark.py` | Run benchmarks (see below) |
+| `arbolom-summarize-benchmark` | `aux_scripts/summarize_benchmark.py` | Summarize benchmark results |
+| `arbolom-merge-csv` | `aux_scripts/merge_csv.py` | Merge benchmark results |
+
+Each command describes its arguments with `--help`. Further instructions and examples can be found in the [notebook](ARBoLoM.ipynb) file.
+
+## pymodrev-Compatible API and Command Line Interface
+ARBoLoM can be used as a drop-in replacement for [pymodrev](https://github.com/ptgm/pymodrev): the `arbolom` command accepts pymodrev's arguments and prints the same output formats,
+
+```bash
+arbolom -m model.bnet -obs obs.lp sync -t r -f c
+```
+
+and the `arbolom` package exports pymodrev's API, working on pymodrev's `Model` objects:
+
+```python
+import arbolom as mrev
+
+model = mrev.model_from_file("model.bnet")
+mrev.obs_sync_ts("p1", {0: {"a": 1, "b": 0}, 1: {"a": 1, "b": 1}})
+print(mrev.is_consistent(model, ["p1"]))
+repaired_models, details = mrev.repair(model)
+```
+
+Models can be given in the formats supported by pymodrev (.bnet, .lp in ModRev's format, .ginml, .zginml) and in ARBoLoM's .lp format; observations in pymodrev's formats (.lp, .csv, .xls, .xlsx) and in ARBoLoM's .lp format. ARBoLoM-specific options (change minimization criteria, timeout, parallel mode) are available as extra arguments of the `arbolom` command, and as `RevisionSettings` of an `arbolom.Session` in the API.
+
+Differences with pymodrev:
+- Only steady (stable state), sync and async observations are supported, with a single updater per run.
+- In async mode ARBoLoM allows at most one node to change per time step, whereas pymodrev requires exactly one.
+- ARBoLoM computes one repair per inconsistent node, optimal with respect to its change minimization criteria, so the repairs often differ from pymodrev's (which prefers changing functions, then flipping edge signs, then adding or removing edges).
+- Fixed edges forbid removing the edge or changing its sign; an inconsistent fixed node makes the model unrepairable.
 
 ## Quick Testing
-For quick testing, the models in the [simple_models](https://github.com/fpaleixo/arbolom/blob/main/simple_models) folder may be used. These are small, hand-made examples of hypothethical biological networks. Due to their compact nature, one can use them to perform quick tests with the scripts, or to manually verify the correctness of the results produced by said scripts.
+For quick testing, the models in the [simple_models](simple_models) folder may be used. These are small, hand-made examples of hypothethical biological networks. Due to their compact nature, one can use them to perform quick tests with the scripts, or to manually verify the correctness of the results produced by said scripts.
 
 Generally, the models will be used in the following fashion:
 1. One of the models is chosen to perform tests on; 
-2. The `corruption.py` script can then be used to create a "wrong" version of this model;
-3. `conversion.py` is ran on both models, to convert them to .lp format;
-4. `gen_observations.py` is ran on the original .lp model, to generate observations that can be used to check the correctness of the wrong model;
-5. `revision.py` is ran on the corrupted model alongisde the generated observations, to revise it. 
+2. `arbolom-corruption` can then be used to create a "wrong" version of this model;
+3. `arbolom-conversion` is ran on both models, to convert them to .lp format;
+4. `arbolom-gen-observations` is ran on the original .lp model, to generate observations that can be used to check the correctness of the wrong model;
+5. `arbolom-revision` is ran on the corrupted model alongisde the generated observations, to revise it. 
 
-Note: Alternatively, instead of using `revision.py`, `consistency_checking.py` can also be used on the inconsistent .lp model, alongside the observations generated from the original model. This script will tell you if the model is consistent with the given observations or not. In case it is not, the inconsistencies generated can then be given to `repair.py`, which will repair the inconsistent model (`revision.py` simply streamlines this process, doing it all at once).
+Note: Alternatively, instead of using `arbolom-revision`, `arbolom-consistency` can also be used on the inconsistent .lp model, alongside the observations generated from the original model. This tool will tell you if the model is consistent with the given observations or not. In case it is not, the inconsistencies generated can then be given to `arbolom-repair`, which will repair the inconsistent model (`arbolom-revision` simply streamlines this process, doing it all at once).
 
 ## Benchmarking
 The files used for benchmarking can be found [here](https://drive.google.com/drive/folders/1larx4vTX602bdXbAS1NtjSpwm8muxYHM?usp=sharing). The folder is organised as follows:
 - There is one folder containing the original models;
 - There is another folder containing all the applied corruption configurations to the original models;
-- There is a folder with the observations obtained from the original models (the time-series observations were generated using the `gen_observations.py` script);
+- There is a folder with the observations obtained from the original models (the time-series observations were generated using `arbolom-gen-observations`);
 - There is one last folder containing results obtained from the benchmarks.
 
 ## Task Progress

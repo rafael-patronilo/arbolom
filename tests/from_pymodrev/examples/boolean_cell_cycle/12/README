@@ -1,0 +1,4 @@
+boolean_cell_cycle/original/boolean_cell_cycle.lp
+boolean_cell_cycle/original/attractors.lp
+
+This test is disabled due to the time it takes to retrieve all the model repair solutions (including sub-optimal)

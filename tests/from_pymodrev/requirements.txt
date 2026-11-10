@@ -1,0 +1,9 @@
+# Copied from pymodrev (https://github.com/ptgm/pymodrev, requirements.txt at commit d2fb450c714ede82181942fdda5ccce5ad1b1bc8),
+# MIT License, (c) Filipe Gouveia, Antonio Romeu and Pedro T. Monteiro.
+# Checked by conftest.py when this folder is run directly (pytest tests/from_pymodrev).
+bitarray
+pyfunctionhood
+clingo
+pytest
+openpyxl
+xlrd

@@ -1,0 +1,1 @@
+cycb@F,(!cdh1) || (!cdc20)/cdh1@F,(cdc20) || (!cyca && !cycb) || (!cyca && p27) || (!cycb && p27)/p27@F,(!cyca && !cycb && !cycd && !cyce) || (!cyca && !cycb && !cycd && p27) || (!cyca && !cycd && !cyce && p27) || (!cycb && !cycd && !cyce && p27)/rb@F,(!cyca && !cycb && !cycd && !cyce) || (!cycb && !cycd && p27) || (!cyca && !cycd && !cyce && p27)/cdc20@E,cycb,cdc20

@@ -1,0 +1,11 @@
+exp(p6).
+obs_vlabel(p6,start,0).
+obs_vlabel(p6,cdc2_cdc13,0).
+obs_vlabel(p6,pp,0).
+obs_vlabel(p6,ste9,1).
+obs_vlabel(p6,rum1,1).
+obs_vlabel(p6,slp1,0).
+obs_vlabel(p6,wee1_mik1,1).
+obs_vlabel(p6,cdc2_cdc13_a,0).
+obs_vlabel(p6,sk,0).
+obs_vlabel(p6,cdc25,0).

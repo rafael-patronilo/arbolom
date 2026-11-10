@@ -1,0 +1,10 @@
++cycd@E,cycd,cycd
+cyca@F,(!cdc20 && !ubch10) || (!rb && !cdc20 && !cdh1) || (!rb && cyca && !cdh1 && !ubch10 && e2f);F,(!rb && !cdc20 && !cdh1) || (!cdc20 && !ubch10) || (!rb && cyca && !cdc20 && e2f);F,(!rb && !cdc20 && !cdh1) || (cyca && !cdc20 && !cdh1 && e2f) || (!cdc20 && !ubch10);F,(!rb && cyca && !cdc20 && !cdh1) || (!rb && !cdc20 && !cdh1 && e2f) || (!cdc20 && !ubch10)
+cdh1@F,(!cycb && cdc20) || (!cyca && cdc20) || (p27 && cdc20)
++cdc20@E,cycb,cdc20
++cyce@E,rb,cyce:F,(e2f) || (rb);E,e2f,cyce:F,(!e2f) || (!rb)
++rb@E,cycd,rb;E,cycb,rb
++ubch10@E,cdh1,ubch10
++p27@E,cycd,p27;E,cycb,p27
+cycb@F,(!cdh1) || (!cdc20)
+e2f@F,(!rb && !cycb && p27) || (!rb && !cyca && !cycb) || (!cyca && !cycb && p27)

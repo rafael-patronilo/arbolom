@@ -2,7 +2,7 @@ import itertools
 
 import pytest
 
-from aux_scripts.common import getAllCompounds, parse_atom
+from arbolom.common import get_all_compounds, parse_atom
 from conftest import bnet_to_lp, find_inconsistencies, stable_obs, timeseries_obs
 
 
@@ -36,7 +36,7 @@ def test_unate_function_does_not_warn(caplog):
 
 
 def test_get_all_compounds_strips_negation():
-    assert getAllCompounds({"f": ["a&!b"], "g": ["!f"]}) == ["a", "b", "f", "g"]
+    assert get_all_compounds({"f": ["a&!b"], "g": ["!f"]}) == ["a", "b", "f", "g"]
 
 
 @pytest.mark.parametrize("text, expected", [
@@ -92,14 +92,12 @@ def test_unsatisfiable_check_raises_descriptive_error(write_obs, monkeypatch):
     # which two compounds change in the same step, which the async encoding forbids),
     # isConsistent() returned None -- the value meaning "consistent" -- so revision.py
     # skipped repair entirely.
-    import revision
-    from aux_scripts.consistency_functions import NoAnswerSetError
-    monkeypatch.setattr(revision, "toggle_stable_state", False)
-    monkeypatch.setattr(revision, "toggle_sync", False)
-    monkeypatch.setattr(revision, "toggle_async", True)
-    monkeypatch.setattr(revision, "benchmark_enabled", True)
+    from arbolom.consistency import NoAnswerSetError
+    from arbolom.modes import UpdateMode
+    from arbolom.revision import ModelReviser, RevisionSettings
+    reviser = ModelReviser(RevisionSettings(mode=UpdateMode.ASYNC, quiet=True))
 
     model = bnet_to_lp("a, !a\nb, !b\n")
     obs = timeseries_obs([[{"a": 0, "b": 0}, {"a": 1, "b": 1}]])
     with pytest.raises(NoAnswerSetError, match="at most one compound may change"):
-        revision.checkConsistency(model, write_obs(obs))
+        reviser.check_consistency(model, write_obs(obs))

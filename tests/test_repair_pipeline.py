@@ -1,10 +1,11 @@
-"""End-to-end repair of a single function, driven in-process the way revision.repair() does."""
+"""End-to-end repair of a single function, driven in-process the way ModelReviser.repair() does."""
 import itertools
 
 import clingo
 import pytest
 
-from aux_scripts.repair_functions import processPreviousObservations, repair_count_sanity_check
+from arbolom.modes import UpdateMode
+from arbolom.repair import process_previous_observations, repair_count_sanity_check
 from conftest import (DEFAULT_CRITERIA, bnet_to_lp, find_inconsistencies, inconsistent_functions,
                       repair_function, stable_obs, timeseries_obs)
 
@@ -12,10 +13,10 @@ NON_DEEPENING_CRITERIA = ["regulators", "term-number", "signs", "term-format"]
 
 
 def _assert_repaired_model_is_consistent(model, func, atoms, obs_path, mode):
-    import revision
-    model_dict = revision.model_to_dict(model)
-    revision.repair_model_dict(model_dict, func, atoms, "repaired")
-    repaired = revision.format_model_dict(model_dict)
+    from arbolom.lp_model import format_model_dict, model_to_dict, repair_model_dict
+    model_dict = model_to_dict(model)
+    repair_model_dict(model_dict, func, atoms, "repaired")
+    repaired = format_model_dict(model_dict)
     assert find_inconsistencies(repaired, obs_path, mode) is None, repaired
 
 
@@ -255,20 +256,20 @@ def _prev_obs(states):
 
 
 def test_upo_deduplicates_identical_states():
-    upos, count = processPreviousObservations(_prev_obs([{"a": 1, "b": 0}, {"a": 1, "b": 0}]))
+    upos, count = process_previous_observations(_prev_obs([{"a": 1, "b": 0}, {"a": 1, "b": 0}]))
     assert count == 1
     assert upos.count("unique_positive_observation") == 1
 
 
 def test_upo_fuses_states_differing_in_one_compound():
     # {a=1,b=0} and {a=1,b=1} are covered by the single term "a"
-    upos, count = processPreviousObservations(_prev_obs([{"a": 1, "b": 0}, {"a": 1, "b": 1}]))
+    upos, count = process_previous_observations(_prev_obs([{"a": 1, "b": 0}, {"a": 1, "b": 1}]))
     assert count == 1
     assert upos.count("unique_positive_observation") == 2  # the program keeps both
 
 
 def test_upo_keeps_unrelated_states_apart():
-    _, count = processPreviousObservations(_prev_obs([{"a": 1, "b": 0}, {"a": 0, "b": 1}]))
+    _, count = process_previous_observations(_prev_obs([{"a": 1, "b": 0}, {"a": 0, "b": 1}]))
     assert count == 2
 
 
@@ -292,7 +293,7 @@ def _upo_states(upo_program, prev_obs):
 
 
 def test_previous_observations_across_experiments_and_time_steps_sync():
-    from aux_scripts.repair_functions import generatePreviousObservations
+    from arbolom.repair import generate_previous_observations
     s = lambda a, b, f: {"a": a, "b": b, "f": f}
     experiments = [
         [s(1, 0, 0), s(1, 0, 1), s(1, 0, 1)],   # f=1 at t=1 and t=2
@@ -300,10 +301,10 @@ def test_previous_observations_across_experiments_and_time_steps_sync():
         [s(0, 1, 0), s(0, 1, 1), s(0, 0, 0)],   # f=1 at t=1
         [s(0, 0, 0), s(0, 0, 0)],               # never positive
     ]
-    prev = generatePreviousObservations("f", _curated(experiments), True, False)
+    prev = generate_previous_observations("f", _curated(experiments), UpdateMode.SYNC)
     # one previous state (3 compounds) per positive observation: e1t1, e1t2, e2t1, e3t1
     assert len(prev) == 4 * 3
-    upos, count = processPreviousObservations(prev)
+    upos, count = process_previous_observations(prev)
     # the identical state preceding e1t1 and e2t1 is kept once
     assert _upo_states(upos, prev) == [
         (("a", 0), ("b", 1), ("f", 0)),
@@ -315,15 +316,15 @@ def test_previous_observations_across_experiments_and_time_steps_sync():
 
 
 def test_previous_observations_across_experiments_async_only_counts_activations():
-    from aux_scripts.repair_functions import generatePreviousObservations
+    from arbolom.repair import generate_previous_observations
     s = lambda a, b, f: {"a": a, "b": b, "f": f}
     experiments = [
         [s(1, 0, 0), s(1, 0, 1), s(1, 0, 1)],   # f activates at t=1, then stays 1 (not counted)
         [s(0, 1, 0), s(0, 1, 1)],               # f activates at t=1
         [s(0, 0, 1), s(0, 0, 1)],               # f stays 1: not an activation
     ]
-    prev = generatePreviousObservations("f", _curated(experiments), False, True)
-    upos, count = processPreviousObservations(prev)
+    prev = generate_previous_observations("f", _curated(experiments), UpdateMode.ASYNC)
+    upos, count = process_previous_observations(prev)
     assert _upo_states(upos, prev) == [
         (("a", 0), ("b", 1), ("f", 0)),
         (("a", 1), ("b", 0), ("f", 0)),
@@ -332,17 +333,17 @@ def test_previous_observations_across_experiments_async_only_counts_activations(
 
 
 def test_previous_observations_across_experiments_stable():
-    from aux_scripts.repair_functions import generatePreviousObservations
+    from arbolom.repair import generate_previous_observations
     s = lambda a, b, f: {"a": a, "b": b, "f": f}
     experiments = [s(1, 0, 1), s(1, 1, 1), s(1, 0, 1), s(0, 1, 1), s(0, 0, 0)]
     curated = "\n".join(f"curated_observation({e},{c},{v})."
                          for e, state in enumerate(experiments, start=1) for c, v in state.items())
-    prev = generatePreviousObservations("f", curated, False, False)
+    prev = generate_previous_observations("f", curated, UpdateMode.STABLE)
     # the full state of every experiment where f=1: experiments 1-4
     assert sorted(prev) == sorted(f"previous_observation({e},{c},{v})"
                                   for e, state in enumerate(experiments, start=1)
                                   if state["f"] == 1 for c, v in state.items())
-    upos, count = processPreviousObservations(prev)
+    upos, count = process_previous_observations(prev)
     # experiment 3 repeats the state of experiment 1, so 3 distinct states remain
     upo_experiments = [a[len("unique_positive_observation("):-2] for a in upos.splitlines()]
     assert len(upo_experiments) == 3
@@ -352,10 +353,10 @@ def test_previous_observations_across_experiments_stable():
 
 
 def test_previous_observations_stable_without_positive_experiments():
-    from aux_scripts.repair_functions import generatePreviousObservations
+    from arbolom.repair import generate_previous_observations
     curated = "curated_observation(1,a,1). curated_observation(1,f,0)."
-    assert generatePreviousObservations("f", curated, False, False) == []
+    assert generate_previous_observations("f", curated, UpdateMode.STABLE) == []
 
 
 def test_upo_empty():
-    assert processPreviousObservations([]) == ("", 0)
+    assert process_previous_observations([]) == ("", 0)

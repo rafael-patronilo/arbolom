@@ -1,0 +1,11 @@
+targets, factors
+cycb, !cdc20 & !cdh1
+cdc20, cycb | ubch10
+cdh1, cdc20 & !cyca & !cycb & p27 & cdh1
+rb, !cyca & !cycb & !cycd & !cyce & p27 & e2f & !rb
+cyca, !cdc20 & !cdh1 & cyca & e2f & !rb & !ubch10 & !cycb
+ubch10, cdc20 & !cdh1 & cyca & cycb & ubch10 & p27
+e2f, !cyca & !cycb & p27 & !rb | !cyca & p27 & !rb & cdc20
+cycd, cycd
+cyce, !rb & e2f
+p27, !cycd & !cyce & !cyca & !cycb | !cycd & !cyca & p27 & !cycb | !cycd & !cyce & p27 & !cycb

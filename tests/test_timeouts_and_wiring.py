@@ -4,14 +4,15 @@ import sys
 
 import pytest
 
-from aux_scripts import deepening_search, repair_functions
+from arbolom.modes import UpdateMode
+from arbolom.repair import deepening_search, search
 
 MODEL = "compound(f).\nfunction(f, 2).\n"
 
 
 @pytest.fixture
 def fake_clingo_calls(monkeypatch):
-    """Replace deepening_search.generateFunctionsClingo with a scripted fake.
+    """Replace deepening_search.generate_functions_clingo with a scripted fake.
 
     Each scripted entry is (elapsed_seconds, completed, result) where `completed` means
     the search finished and result is None or (atoms, costs). The fake advances a fake
@@ -27,15 +28,15 @@ def fake_clingo_calls(monkeypatch):
         clock["now"] += elapsed
         return completed, result
 
-    monkeypatch.setattr(deepening_search, "generateFunctionsClingo", fake)
+    monkeypatch.setattr(deepening_search, "generate_functions_clingo", fake)
     monkeypatch.setattr(deepening_search.time, "monotonic", lambda: clock["now"])
     return script, calls
 
 
 def _deepening(timeout, upo_count=5, **kwargs):
     # MODEL has 2 terms; upo_count is the node limit
-    return deepening_search.generateFunctions(
-        timeout, "f", MODEL, "", ("", upo_count), False, True, False, ["regulators"], [], **kwargs)
+    return deepening_search.generate_functions(
+        timeout, "f", MODEL, "", ("", upo_count), UpdateMode.SYNC, ["regulators"], [], **kwargs)
 
 
 def test_deepening_timeout_without_any_solution_does_not_crash(fake_clingo_calls):
@@ -110,8 +111,8 @@ def test_recover_timeouts_calls_generate_functions_with_matching_arguments(monke
     # ((timeout, 0) lands in disable_change_criteria, toggle_stable_state in
     # repair_timeout, ...) and toggle_async is missing, so every recovery attempt raises
     # TypeError and a whole benchmark run is lost.
-    import revision
-    signature = inspect.signature(repair_functions.generateFunctions)
+    from arbolom import revision
+    signature = inspect.signature(search.generate_functions)
     bound_calls = []
 
     def spy(*args, **kwargs):
@@ -119,25 +120,25 @@ def test_recover_timeouts_calls_generate_functions_with_matching_arguments(monke
         bound_calls.append(bound.arguments)
         return "repaired", ["node_regulator(1,a)", "regulator_activator(a)"], [0, 0, 0, 0]
 
-    monkeypatch.setattr(revision, "generateFunctions", spy)
-    monkeypatch.setattr(revision, "benchmark_enabled", True)
-    monkeypatch.setattr(revision, "toggle_stable_state", False)
-    monkeypatch.setattr(revision, "toggle_sync", True)
-    monkeypatch.setattr(revision, "toggle_async", False)
-    monkeypatch.setattr(revision, "disable_change_criteria", ["extra-regulators"])
-    monkeypatch.setattr(revision, "min_change_criteria", ["term-number", "regulators", "signs", "term-format"])
+    monkeypatch.setattr(revision, "generate_functions", spy)
+    reviser = revision.ModelReviser(revision.RevisionSettings(
+        mode=UpdateMode.SYNC,
+        quiet=True,
+        disable_change_criteria=["extra-regulators"],
+        min_change_criteria=["term-number", "regulators", "signs", "term-format"],
+    ))
 
     stats = {"f": {}}
     model_dict = {}
     to_recover = [("f", ("", 1), [1, 1, 1, 1], 3.0)]
-    revision.recover_timeouts("model", "incst", stats, to_recover,
-                              revision.time.monotonic() + 100, model_dict)
+    reviser.recover_timeouts("model", "incst", stats, to_recover,
+                             revision.time.monotonic() + 100, model_dict)
 
     assert len(bound_calls) == 1
     args = bound_calls[0]
     assert args["disable_change_criteria"] == ["extra-regulators"]
     assert isinstance(args["repair_timeout"], tuple)
-    assert (args["toggle_stable_state"], args["toggle_sync"], args["toggle_async"]) == (False, True, False)
+    assert args["mode"] is UpdateMode.SYNC
 
 
 BENCH_REQUIRED = ["benchmark.py", "-f", "cfg", "-o", "obs", "-m", "model", "-s", "out"]
@@ -147,8 +148,7 @@ BENCH_REQUIRED = ["benchmark.py", "-f", "cfg", "-o", "obs", "-m", "model", "-s",
 def test_benchmark_skip_is_honoured(monkeypatch, mode_flag):
     # Regression: parseArgs() returned early when no mode flag was given (default stable
     # mode) before assigning skip_n_first, so `-skip N` was silently ignored.
-    import benchmark
+    from arbolom.scripts import benchmark
     monkeypatch.setattr(sys, "argv", BENCH_REQUIRED + mode_flag + ["-skip", "3"])
-    monkeypatch.setattr(benchmark, "skip_n_first", 0)
-    benchmark.parseArgs()
-    assert benchmark.skip_n_first == 3
+    settings = benchmark.parse_args()
+    assert settings.skip_n_first == 3
