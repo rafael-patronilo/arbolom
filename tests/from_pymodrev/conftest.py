@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 import arbolom as mrev
 
-venv_dir = os.environ.get("VIRTUAL_ENV")
+venv_dir = os.environ.get("VIRTUAL_ENV", "./.venv")
 
 def get_required_packages(requirements_path: Path):
     packages = ["pymodrev"]
@@ -50,7 +50,7 @@ def clean_observations():
     mrev.clear_obs()
 
 def pytest_sessionstart(session):
-    if not venv_dir:
+    if not venv_dir or not Path(venv_dir).exists():
         error_msg = (
             f"\nFATAL: Variable VIRTUAL_ENV not found.\n"
             f"Create and activate a virtual environment before running tests:\n"
