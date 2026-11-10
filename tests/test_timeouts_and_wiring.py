@@ -13,57 +13,99 @@ MODEL = "compound(f).\nfunction(f, 2).\n"
 def fake_clingo_calls(monkeypatch):
     """Replace deepening_search.generateFunctionsClingo with a scripted fake.
 
-    Each scripted entry is (elapsed_seconds, timed_out, result) where result is None or
-    (atoms, costs). The fake advances a fake monotonic clock by elapsed_seconds.
+    Each scripted entry is (elapsed_seconds, completed, result) where `completed` means
+    the search finished and result is None or (atoms, costs). The fake advances a fake
+    monotonic clock by elapsed_seconds and records the (soft, hard) timeouts it got.
     """
     clock = {"now": 1000.0}
     calls = []
     script = []
 
-    def fake(node_number, repair_timeout, *args, **kwargs):
-        calls.append({"node_number": node_number, "timeout": repair_timeout})
-        elapsed, timed_out, result = script.pop(0)
+    def fake(node_number, timeouts, *args, **kwargs):
+        calls.append({"node_number": node_number, "timeouts": timeouts, **kwargs})
+        elapsed, completed, result = script.pop(0)
         clock["now"] += elapsed
-        return timed_out, result
+        return completed, result
 
     monkeypatch.setattr(deepening_search, "generateFunctionsClingo", fake)
     monkeypatch.setattr(deepening_search.time, "monotonic", lambda: clock["now"])
     return script, calls
 
 
+def _deepening(timeout, upo_count=5, **kwargs):
+    # MODEL has 2 terms; upo_count is the node limit
+    return deepening_search.generateFunctions(
+        timeout, "f", MODEL, "", ("", upo_count), False, True, False, ["regulators"], [], **kwargs)
+
+
 def test_deepening_timeout_without_any_solution_does_not_crash(fake_clingo_calls):
-    # BUG: when the first solver call times out before finding any model,
-    # generateFunctionsClingo returns (True, None) and make_return_tuple(None) raises
-    # "TypeError: 'NoneType' object is not subscriptable" instead of reporting a timeout.
+    # Regression: when the first solver call timed out before finding any model,
+    # make_return_tuple(None) raised "TypeError: 'NoneType' object is not subscriptable".
     script, _ = fake_clingo_calls
-    script.append((10, True, None))
-    result, atoms, costs = deepening_search.generateFunctions(
-        10, "f", MODEL, "", ("", 5), False, True, False, ["regulators"], [])
-    assert result == "timeout"
-    assert not atoms and costs is None
+    script.append((10, False, None))
+    assert _deepening(10) == ("timeout", [], None)
 
 
 def test_deepening_never_passes_a_negative_timeout_to_clingo(fake_clingo_calls):
-    # BUG: the remaining budget is computed as repair_timeout - elapsed and passed straight
-    # to SolveHandle.wait(). Once the budget is exhausted that value is negative, and
-    # clingo documents that a negative timeout means "block until a result is ready",
-    # i.e. no timeout at all.
+    # Regression: the remaining budget was passed straight to SolveHandle.wait(). Once
+    # exhausted it was negative, which clingo treats as "no timeout at all".
     script, calls = fake_clingo_calls
     script += [
-        (15, False, None),   # 2 nodes: proven unsat, but took longer than the budget
-        (1, False, None),    # 3 nodes
-        (1, False, None),    # 1 node
+        (15, True, None),    # 2 nodes: proven unsat, but took longer than the budget
+        (1, True, None),     # 3 nodes
+        (1, True, None),     # 1 node
+        (1, True, None),     # 4 nodes
+        (1, True, None),     # 5 nodes
     ]
-    try:
-        deepening_search.generateFunctions(
-            10, "f", MODEL, "", ("", 5), False, True, False, ["regulators"], [])
-    except IndexError:
-        pass  # ran out of scripted calls: irrelevant to this check
-    assert all(c["timeout"] >= 0 for c in calls), calls
+    assert _deepening(10) == ("no_solution", [], None)
+    assert len(calls) == 5
+    assert all(min(c["timeouts"]) >= 0 for c in calls), calls
+
+
+def test_deepening_returns_best_of_both_directions(fake_clingo_calls):
+    script, calls = fake_clingo_calls
+    script += [
+        (1, True, None),                       # 2 nodes
+        (1, True, (["above"], [3])),           # 3 nodes
+        (1, True, (["below"], [1])),           # 1 node: cheaper
+    ]
+    assert _deepening(100) == ("repaired", ["below"], [1, 1])
+
+
+def test_deepening_uses_hard_timeout_only_until_a_candidate_exists(fake_clingo_calls):
+    script, calls = fake_clingo_calls
+    script += [
+        (1, True, None),                       # 2 nodes
+        (1, True, (["above"], [3])),           # 3 nodes
+        (1, False, None),                      # 1 node: timed out
+    ]
+    assert _deepening((10, 50)) == ("timeout", ["above"], [1, 3])
+    assert calls[0]["timeouts"] == (10, 50)
+    assert calls[1]["timeouts"] == (9, 50)
+    assert calls[2]["timeouts"] == (8, 0)    # a candidate exists: no hard extension
+
+
+def test_deepening_forwards_parallel_mode(fake_clingo_calls):
+    script, calls = fake_clingo_calls
+    script.append((1, True, (["x"], [0])))
+    _deepening(10, parallel_mode="4")
+    assert calls[0]["parallel_mode"] == "4"
+
+
+def test_deepening_cost_bounds(fake_clingo_calls):
+    # bounds = previous repair: one node of variation, then clingo costs [2]
+    script, calls = fake_clingo_calls
+    script += [
+        (1, True, None),     # 2 nodes (variation 0): no bound needed, anything is better
+        (1, True, None),     # 3 nodes (variation 1): bounded
+        (1, True, None),     # 1 node  (variation 1): bounded
+    ]
+    assert _deepening(10, cost_bounds=[1, 2]) == ("no_solution", [], None)
+    assert [c["cost_bounds"] for c in calls] == [None, [2], [2]]  # variation 2 never tried
 
 
 def test_recover_timeouts_calls_generate_functions_with_matching_arguments(monkeypatch):
-    # BUG: recover_timeouts() was not updated when disable_change_criteria was added to
+    # Regression: recover_timeouts() was not updated when disable_change_criteria was added to
     # generateFunctions(). Its positional arguments are shifted by one
     # ((timeout, 0) lands in disable_change_criteria, toggle_stable_state in
     # repair_timeout, ...) and toggle_async is missing, so every recovery attempt raises
@@ -103,9 +145,8 @@ BENCH_REQUIRED = ["benchmark.py", "-f", "cfg", "-o", "obs", "-m", "model", "-s",
 
 @pytest.mark.parametrize("mode_flag", [[], ["-sync"]], ids=["default-mode", "explicit-mode"])
 def test_benchmark_skip_is_honoured(monkeypatch, mode_flag):
-    # BUG: parseArgs() returns early when no mode flag is given (default stable mode)
-    # before assigning skip_n_first, so `-skip N` is silently ignored and a resumed
-    # benchmark re-runs (and then refuses to overwrite) completed tests.
+    # Regression: parseArgs() returned early when no mode flag was given (default stable
+    # mode) before assigning skip_n_first, so `-skip N` was silently ignored.
     import benchmark
     monkeypatch.setattr(sys, "argv", BENCH_REQUIRED + mode_flag + ["-skip", "3"])
     monkeypatch.setattr(benchmark, "skip_n_first", 0)

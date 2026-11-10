@@ -12,7 +12,9 @@ The encodings responsible for repairing a function using [stable state](https://
 All scripts can be tested with no installation by using Google Colab. Just download the repository and change the working directory to the arbolom folder.
 
 ### Using a local installation
-For a local installation, Python 3.6 or above is required, alongside the [clingo package](https://pypi.org/project/clingo/). Detailed instructions can be found in the [potassco website](https://potassco.org/clingo/).
+For a local installation, Python 3.13 or above is required, alongside the [clingo package](https://pypi.org/project/clingo/). Detailed instructions can be found in the [potassco website](https://potassco.org/clingo/).
+
+With [uv](https://docs.astral.sh/uv/), `uv sync` installs all dependencies and `uv run pytest` runs the test suite.
 
 ## Running the Scripts
 

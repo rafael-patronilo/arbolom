@@ -38,10 +38,10 @@ def parseArgs():
 
 def loadFiles() -> pd.DataFrame:
   dfs = []
-  csvs = csv_folder.glob("*.csv")
+  csvs = sorted(csv_folder.glob("*.csv"))
   if not csvs:
     print(f"No CSV files found in {csv_folder}")
-    return
+    return None
   
   for f in csvs:
     o_type = None
@@ -59,6 +59,8 @@ def loadFiles() -> pd.DataFrame:
       continue
     dfs.append(csv)
   print(f"Loaded {len(dfs)} CSV files")
+  if not dfs:
+    return None
   df = pd.concat(dfs, ignore_index=True)
   return df
 
@@ -95,6 +97,7 @@ def calcModelStateCounts(df : pd.DataFrame, summary: pd.DataFrame):
   model_state_counter = defaultdict(lambda:0)
   for name, model_df in groupby_model(df):
     state = model_df[COLS.BCHMRK_MODEL_STATE].iloc[0]
+    model_state_counter[state] += 1
     summary.loc[state, 'Count'] = summary.loc[state, 'Count'].iloc[0] + 1
 
   print("Number of models per state:")
@@ -179,6 +182,8 @@ def summarize(df: pd.DataFrame):
 def main():
   parseArgs()
   df = loadFiles()
+  if df is None:
+    return
   summary = summarize(df)
   print("Summary table:")
   print(summary.to_string(
@@ -186,7 +191,7 @@ def main():
     na_rep='-'
   ))
   
-  for out_file in args.output_file:
+  for out_file in args.output_file or []:
     writeTo(summary, Path(out_file))
 
 if __name__ == '__main__':

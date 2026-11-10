@@ -1,3 +1,4 @@
+import logging
 from aux_scripts.common import getAllCompounds, getAllLiterals, getRegulatorsOf
 
 def getFunctionDict(lines, logger):
@@ -22,6 +23,16 @@ def getFunctionDict(lines, logger):
           all_regulators.add(r)
 
       if logger : logger.debug("Implicants of "+full[0]+": "+str(implicants))
+
+      #The LP format stores one sign per regulator, so a regulator appearing both
+      #negated and non-negated in a function cannot be represented faithfully
+      literals = getAllLiterals(implicants)
+      dual_regulators = sorted({l[1:] for l in literals if l.startswith('!') and l[1:] in literals})
+      if dual_regulators:
+        (logger or logging.getLogger("conversion")).warning(
+          f"Function of {full[0]} uses {', '.join(dual_regulators)} both as activator and inhibitor. "
+          "The LP format supports a single sign per regulator, so terms containing them "
+          "will always evaluate to false and the converted function will not match the original.")
 
       #each compound is a key; the value is the corresponding 
       # list of prime implicants

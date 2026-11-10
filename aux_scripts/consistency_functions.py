@@ -31,13 +31,24 @@ def consistencyCheck(model, obsv, stable_flag, sync_flag, async_flag, path_mode=
       atoms = (str(model).split(" "))
   return atoms
 
+class NoAnswerSetError(Exception):
+  """The consistency checking program has no answer set, so consistency cannot be decided."""
+
 #Inputs: atoms is a list of atoms obtained from solving with clingo.
-#Purpose: Prints the obtained atoms in a more readable manner.
+#Purpose: Returns None if the model is consistent, otherwise the inconsistencies
+# followed by the curated observations (in LP format). Raises NoAnswerSetError if
+# consistency checking had no answer set.
 def isConsistent(atoms,stable_flag, sync_flag, async_flag, print_inconsistencies=False, print_consistent=True):
   if not atoms:
-    print("No answers sets could be found	\u2755 \nPossible reasons for this include:\n"
-      + "- Using the wrong update mode; \n- Defining a compound as an input compound"
-      + " when its value changes over time in the observations (time-series only).")
+    if async_flag:
+      reason = ("In asynchronous mode at most one compound may change its state per time step, "
+        "but the observations contain a time step in which several compounds change. "
+        "Check that the observations are asynchronous (e.g. that synchronous observations "
+        "were not used with the asynchronous mode).")
+    else:
+      reason = ("This is not expected for this update mode; check the model and observation files.")
+    raise NoAnswerSetError("Consistency checking found no answer set, so the consistency "
+      "of the model cannot be decided. " + reason)
   else:
     isConsistent = True
     inconsistent_LP = ""

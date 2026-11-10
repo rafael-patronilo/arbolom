@@ -14,6 +14,7 @@ inconsistent_functions_path = "encodings/repairs/auxiliary/inconsistent_function
 #Paths of the encodings to obtain the observations that happen before positive observations
 previous_observations_sync_path = "encodings/repairs/auxiliary/previous_observations_sync.lp"
 previous_observations_async_path = "encodings/repairs/auxiliary/previous_observations_async.lp"
+previous_observations_stable_path = "encodings/repairs/auxiliary/previous_observations_stable.lp"
 
 OPTIONAL_REPAIR_PREDICATES = [('fixed', 2), ('fixed', 3), ('unique_positive_observation', 2)]
 #Paths of the encodings that generating functions
@@ -81,8 +82,9 @@ def generateFunctions(
   if min_change_criteria[0] == 'term-number':
     if logger: logger.info("Switching to former version to take advantage of deepening search")
     return deepening_search.generateFunctions(
-      repair_timeout, func, model, incst, upo, toggle_stable_state, toggle_sync, toggle_async, 
-      min_change_criteria[1:], disable_change_criteria, path_mode, logger)
+      repair_timeout, func, model, incst, upo, toggle_stable_state, toggle_sync, toggle_async,
+      min_change_criteria[1:], disable_change_criteria, path_mode, logger,
+      parallel_mode=parallel_mode, cost_bounds=cost_bounds)
   function = []
   upo_program = ""
   if upo : upo_program = upo[0]
@@ -146,6 +148,8 @@ def generateFunctionsClingo(node_number,
   else:
     soft_timeout = repair_timeout
     hard_timeout = 0
+  # clingo treats a negative timeout as "no timeout"
+  soft_timeout, hard_timeout = max(0.0, soft_timeout), max(0.0, hard_timeout)
   if logger: logger.debug(f"Starting clingo with args {clingo_args}")
   ctl = clingo.Control(arguments=clingo_args, logger=clingo_logger(logger, optional_predicates=OPTIONAL_REPAIR_PREDICATES))
 
@@ -193,7 +197,9 @@ def generateFunctionsClingo(node_number,
       if not function:
         if logger: logger.debug(f"No solution, waiting at most {hard_timeout} seconds for any solution")
         cancelling = True
-        handle.wait(hard_timeout)
+        if handle.wait(hard_timeout) and not function:
+          if logger: logger.debug("Search space exhausted: there is no solution")
+          no_timeout = True
       elif logger: logger.debug("Suboptimal solution already found, interrupting")
       handle.cancel()
   
@@ -275,8 +281,12 @@ def processInconsistentFunctions(inconsistent_functions, enable_prints=False):
 # toggle_sync - flag that enables synchronous interaction
 # toggle_async - flag that enables asynchronous interaction
 # path_mode - flag that enables loading the inconsistencies from a file, instead of a string
-#Purpose: Returns observations that happen in the timestep before
-# positive observations (the observations are contained in inconsistencies)
+#Purpose: Returns the states that are the input of the function for its
+# positive observations (the observations are contained in inconsistencies):
+# previous_observation(E,T,C,S) atoms for the timestep before each positive
+# observation in time-series modes, and previous_observation(E,C,S) atoms for
+# each experiment where the compound is active in stable state mode (used when
+# neither toggle_sync nor toggle_async is set)
 def generatePreviousObservations(func, inconsistencies, toggle_sync, toggle_async, path_mode=False, logger=None):
   clingo_args = ["0", f"-c compound={func}"]
   
@@ -291,9 +301,9 @@ def generatePreviousObservations(func, inconsistencies, toggle_sync, toggle_asyn
     ctl.load(previous_observations_sync_path)
   elif toggle_async:
     ctl.load(previous_observations_async_path)
-  else: 
-    return []
-  
+  else:
+    ctl.load(previous_observations_stable_path)
+
   ctl.ground([("base", [])])
   functions = []
 
@@ -314,24 +324,29 @@ def generatePreviousObservations(func, inconsistencies, toggle_sync, toggle_asyn
   return functions
 
 
-#Inputs: 
-# -prev_obs, a string containing all previous observations
+#Inputs:
+# -prev_obs, the atoms obtained from generatePreviousObservations
 #Purpose: Returns a tuple with all unique positive observations,
-# and the total number of unique positive observations
+# and the total number of unique positive observations.
+# Positive observations are identified by (experiment, timestep) in time-series
+# modes and by experiment in stable state mode; observations from different
+# experiments with the same state are counted once.
 def processPreviousObservations(prev_obs, logger=None):
   if not prev_obs:
     return ("",0)
   start = time.monotonic()
   observations = defaultdict(list)
   compounds = set()
-  
+
   for previous_obsv in prev_obs:
     arguments = previous_obsv.split(')')[0].split('(')[1].split(',')
-    experiment = arguments[0]
-    timestep = str(int(arguments[1]) + 1)
-    compound = arguments[2]
-    state = arguments[3]
-    observations[(experiment, timestep)].append((compound, state))
+    if len(arguments) == 4: # previous_observation(E,T,C,S) in time-series modes
+      experiment, timestep, compound, state = arguments
+      obs_id = (experiment, str(int(timestep) + 1))
+    else: # previous_observation(E,C,S) in stable state mode
+      experiment, compound, state = arguments
+      obs_id = (experiment,)
+    observations[obs_id].append((compound, state))
     compounds.add(compound)
   
   @dataclass(frozen=False) # We will need to write to the field state_key

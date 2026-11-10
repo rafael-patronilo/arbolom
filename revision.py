@@ -366,7 +366,7 @@ def recover_timeouts(model, inconsistencies, revision_stats, to_recover, timeout
     func_logger = logging.getLogger(func)
     func_logger.info(f"Attempting to recover {func}")
     compound_repair_start = time.monotonic()
-    result, functions, costs = generateFunctions(func, model, inconsistencies, upo, min_change_criteria, (model_timeout, 0),
+    result, functions, costs = generateFunctions(func, model, inconsistencies, upo, min_change_criteria, disable_change_criteria, (model_timeout, 0),
       toggle_stable_state, toggle_sync, toggle_async, parallel_mode=parallel_mode, logger = func_logger, cost_bounds=old_costs)
     repair_time = time.monotonic() - compound_repair_start + orig_repair_time
     func_state = None

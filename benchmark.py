@@ -99,6 +99,7 @@ def parseArgs():
   logger.debug("Obtained save folder: " + save_folder)
 
   model_name = args.model_name
+  skip_n_first = args.skip_n_first
   stable = args.stable_state
   synchronous = args.synchronous
   asynchronous = args.asynchronous
@@ -132,8 +133,6 @@ def parseArgs():
     toggle_async = True
     logger.info("Mode used: Asynchronous \U0001f331")
 
-  skip_n_first = args.skip_n_first
-
   return
 
 
@@ -143,22 +142,24 @@ def getObsvList():
   obsv_path_list = []
 
   #For each file system entity inside the Observations folder
-  for obsv_model in os.listdir(obsv_path):
+  for obsv_model in sorted(os.listdir(obsv_path)):
 
     #If it is a folder containing the name of the model passed as argument
     if os.path.isdir(os.path.join(obsv_path, obsv_model)) and model_name in obsv_model:
 
       #For each folder containing the observations for the interaction types inside the folder with the name of the model
-      for interaction_type in os.listdir(os.path.join(obsv_path, obsv_model)):
+      for interaction_type in sorted(os.listdir(os.path.join(obsv_path, obsv_model))):
         #If the folder name matches the chosen interaction type
         if toggle_stable_state and "stable" == interaction_type or \
           toggle_sync and "sync" == interaction_type or \
           toggle_async and "async" == interaction_type:
 
           #Then place all the paths for the observations within inside the list
-          for obsv in os.listdir(os.path.join(obsv_path, obsv_model,interaction_type)):
+          for obsv in sorted(os.listdir(os.path.join(obsv_path, obsv_model,interaction_type))):
             obsv_path_list.append(os.path.join(obsv_path, obsv_model,interaction_type,obsv))
           return obsv_path_list
+  global_logger.error(f"No observations found for model '{model_name}' in {obsv_path}")
+  return obsv_path_list
 
 def getConfigsList():
 
@@ -166,12 +167,12 @@ def getConfigsList():
   exact_model_name = None
 
   #For each file system entity inside the Configurations folder
-  for config_folder in os.listdir(config_path):
+  for config_folder in sorted(os.listdir(config_path)):
     #If it is a folder
     if os.path.isdir(os.path.join(config_path, config_folder)):
 
       #For each model folder within that folder
-      for model_folder in os.listdir(os.path.join(config_path, config_folder)):
+      for model_folder in sorted(os.listdir(os.path.join(config_path, config_folder))):
         #If it matches the name of the model passed as an argument, add it to the list
         if model_name in model_folder:
           if exact_model_name is None:
@@ -187,9 +188,8 @@ def getConfigsList():
   return configs_path_list
 
 def get_models(model_path):
-  input_model_list = [os.path.join(model_path, f) for f in os.listdir(model_path)
-    if os.path.isfile(os.path.join(model_path,f)) and os.path.splitext(f)[1] == ".lp" or
-    os.path.splitext(f)[1] == ".bnet"]
+  input_model_list = [os.path.join(model_path, f) for f in sorted(os.listdir(model_path))
+    if os.path.isfile(os.path.join(model_path,f)) and os.path.splitext(f)[1] in (".lp", ".bnet")]
   return input_model_list
 
 def benchmark_filename(config_dir, obsv_file, snapshot):
@@ -295,7 +295,7 @@ def main():
             global_logger.info(f"Skipping: {test_id}")
             test_number += 1
             continue
-          result = subprocess.run(['python', 'revision.py',
+          result = subprocess.run([sys.executable, 'revision.py',
             '-f', model_path,
             '-o', current_observations,
             f'-{interaction_mode}', '-benchmark'] + common_revision_args,

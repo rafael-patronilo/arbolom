@@ -23,6 +23,18 @@ def test_regulator_only_compounds_become_inputs():
     assert "function(x, 1)." in lp and "term(x, 1, x)." in lp
 
 
+def test_dual_sign_regulator_warns(caplog):
+    with caplog.at_level("WARNING"):
+        bnet_to_lp("a, a\nb, b\nc, c\nf, (a & b) | (!a & c)\n")
+    assert "uses a both as activator and inhibitor" in caplog.text
+
+
+def test_unate_function_does_not_warn(caplog):
+    with caplog.at_level("WARNING"):
+        bnet_to_lp("a, a\nb, b\nf, (a & !b) | !b\n")
+    assert "activator and inhibitor" not in caplog.text
+
+
 def test_get_all_compounds_strips_negation():
     assert getAllCompounds({"f": ["a&!b"], "g": ["!f"]}) == ["a", "b", "f", "g"]
 
@@ -65,13 +77,13 @@ def test_sync_detects_inconsistency(write_obs):
     assert _inconsistent_atoms(incst) == ["inconsistent(1,1,f,1)."]
 
 
-def test_unsatisfiable_check_is_not_reported_as_consistent(write_obs, monkeypatch):
-    # BUG: when the consistency program has no answer set (here: async observations in
+def test_unsatisfiable_check_raises_descriptive_error(write_obs, monkeypatch):
+    # Regression: when the consistency program had no answer set (async observations in
     # which two compounds change in the same step, which the async encoding forbids),
-    # consistencyCheck() returns [] and isConsistent() returns None -- the same value it
-    # returns for a consistent model. revision.checkConsistency() then reports the model
-    # as consistent and skips repair entirely.
+    # isConsistent() returned None -- the value meaning "consistent" -- so revision.py
+    # skipped repair entirely.
     import revision
+    from aux_scripts.consistency_functions import NoAnswerSetError
     monkeypatch.setattr(revision, "toggle_stable_state", False)
     monkeypatch.setattr(revision, "toggle_sync", False)
     monkeypatch.setattr(revision, "toggle_async", True)
@@ -79,8 +91,5 @@ def test_unsatisfiable_check_is_not_reported_as_consistent(write_obs, monkeypatc
 
     model = bnet_to_lp("a, !a\nb, !b\n")
     obs = timeseries_obs([[{"a": 0, "b": 0}, {"a": 1, "b": 1}]])
-    try:
-        result = revision.checkConsistency(model, write_obs(obs))
-    except Exception:
-        return  # raising is an acceptable way to surface the problem
-    assert result is not None, "unsatisfiable consistency check was reported as 'consistent'"
+    with pytest.raises(NoAnswerSetError, match="at most one compound may change"):
+        revision.checkConsistency(model, write_obs(obs))

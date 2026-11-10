@@ -6,7 +6,7 @@
 %that imply that the compound's function was activated).
 
 #const compound = c.
-#const max_max_node_number = n.
+#const max_node_number = n.
 
 %*--Fixing regulators--*%
 %fixed/2 tells us that regulator C has to be one of the compound's regulators

@@ -18,7 +18,7 @@ class RepairCriterion:
         else:
             combined_disable_constraints = None
 
-        return RepairCriterion(combined_optimize_format, combined_disable_constraints, description)
+        return RepairCriterion(name, combined_optimize_format, combined_disable_constraints, description)
 
     def build_optimize_statement(self, priority: int) -> str:
         """
@@ -39,7 +39,8 @@ class RepairCriterion:
         cls, name : str, variables : list[str], expression : str, 
         description : str
     ):
-        optimize_format_string = f"#minimize{{1@{{p}}, {', '.join(variables)} : {expression}}}."
+        # Braces of #minimize{...} are doubled so they survive the later str.format(p=...)
+        optimize_format_string = f"#minimize{{{{1@{{p}}, {', '.join(variables)} : {expression}}}}}."
         disable_constraints = f":- {expression}."
         return cls(name, optimize_format_string, disable_constraints,
                     description=description)

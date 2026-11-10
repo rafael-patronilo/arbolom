@@ -8,7 +8,7 @@ from conftest import ROOT, bnet_to_lp
 
 
 def load_real_repair_criteria(allow_partial=False):
-    """Load aux_scripts/repair_criteria.py from disk, bypassing the conftest shim.
+    """Load aux_scripts/repair_criteria.py from disk as a fresh, isolated module.
 
     With allow_partial=True, an exception during module execution is swallowed and
     whatever was defined before it (e.g. the RepairCriterion class) is returned, so a
@@ -31,7 +31,7 @@ def load_real_repair_criteria(allow_partial=False):
 # --- Bugs ------------------------------------------------------------------
 
 def test_module_imports():
-    # BUG: RepairCriterion.combine() calls RepairCriterion(optimize, disable, description),
+    # Regression: RepairCriterion.combine() used to call RepairCriterion(optimize, disable, description),
     # dropping `name` and shifting every field by one. The combined criterion is then
     # registered under its optimize string, so CRITERIA["term-number"] raises KeyError
     # at import time and revision.py / benchmark.py cannot start.
@@ -46,7 +46,7 @@ def test_combined_criteria_are_registered_under_their_name(name):
 
 
 def test_basic_criterion_builds_minimize_statement():
-    # BUG: from_expression() emits "#minimize{1@{p}, ...}." -- the outer braces are not
+    # Regression: from_expression() used to emit "#minimize{1@{p}, ...}." -- the outer braces are not
     # escaped, so build_optimize_statement() raises
     # "ValueError: unexpected '{' in field name" for every criterion.
     mod = load_real_repair_criteria(allow_partial=True)
@@ -67,7 +67,7 @@ def test_combine_preserves_fields():
     assert combined.build_disable_statement().count(":-") == 2
 
 
-# --- Characterisation (uses the importable module / shim) -------------------
+# --- Characterisation --------------------------------------------------------
 
 def test_priorities_follow_list_order():
     from aux_scripts.repair_criteria import build_asp_change_criteria

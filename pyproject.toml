@@ -4,6 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
     "clingo>=5.8.3",
+    "natsort>=8.4.0",
     "pandas>=3.1.1",
 ]
 
